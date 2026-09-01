@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>登录 - 设备运行监控系统</title>
+    <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="login-page">
+
+    <!-- ============================================================ -->
+    <!-- 登录容器 -->
+    <!-- ============================================================ -->
+    <div class="login-container">
+        <div class="login-card">
+            <!-- Logo / 品牌 -->
+            <div class="login-brand">
+                <div class="login-icon">🏭</div>
+                <h1>设备运行监控系统</h1>
+                <p class="login-subtitle">设备运行监控系统</p>
+            </div>
+
+            <!-- 登录表单 -->
+            <form id="loginForm" autocomplete="off">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">👤</span>
+                        <input
+                            type="text"
+                            id="username"
+                            placeholder="请输入用户名"
+                            required
+                            autofocus
+                            autocomplete="off"
+                        />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">🔑</span>
+                        <input
+                            type="password"
+                            id="password"
+                            placeholder="请输入密码"
+                            required
+                            autocomplete="off"
+                        />
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-login" id="loginBtn">
+                    登 录
+                </button>
+            </form>
+
+            <!-- 提示信息 -->
+            <p class="login-hint">
+                ⚠️ 账号由系统管理员分配，无需注册
+            </p>
+
+            <!-- 错误提示 -->
+            <div class="login-error" id="loginError" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- JavaScript -->
+    <!-- ============================================================ -->
+    <script type="module">
+        // ============================================================
+        // 模块导入
+        // ============================================================
+        import { login } from '/js/auth.js';
+
+        // ============================================================
+        // DOM 引用
+        // ============================================================
+        const form = document.getElementById('loginForm');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('loginBtn');
+        const errorDiv = document.getElementById('loginError');
+
+        // ============================================================
+        // 检查是否已登录（已登录则跳转首页）
+        // ============================================================
+        (async function checkAlreadyLoggedIn() {
+            try {
+                const { getCurrentUser } = await import('/js/auth.js');
+                const user = await getCurrentUser();
+                if (user) {
+                    window.location.href = '/index.html';
+                }
+            } catch (_) {
+                // 未登录，继续显示登录页
+            }
+        })();
+
+        // ============================================================
+        // 登录表单提交
+        // ============================================================
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+
+            // 基础校验
+            if (!username || !password) {
+                showError('请输入用户名和密码');
+                return;
+            }
+
+            // 用户名格式校验（仅允许字母、数字、下划线）
+            if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+                showError('用户名仅限字母、数字、下划线');
+                return;
+            }
+
+            // 禁用按钮，防止重复提交
+            loginBtn.disabled = true;
+            loginBtn.textContent = '登录中...';
+            hideError();
+
+            try {
+                const result = await login(username, password);
+
+                if (result.success) {
+                    // 登录成功，跳转首页
+                    window.location.href = '/index.html';
+                } else {
+                    showError(result.message || '登录失败，请检查用户名或密码');
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = '登 录';
+                }
+            } catch (err) {
+                showError(err.message || '登录失败，请稍后重试');
+                loginBtn.disabled = false;
+                loginBtn.textContent = '登 录';
+            }
+        });
+
+        // ============================================================
+        // 错误提示控制
+        // ============================================================
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            errorDiv.style.display = 'none';
+        }
+
+        // ============================================================
+        // 回车键触发登录
+        // ============================================================
+        passwordInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                form.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        usernameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                passwordInput.focus();
+            }
+        });
+
+        // ============================================================
+        // 输入时自动隐藏错误
+        // ============================================================
+        usernameInput.addEventListener('input', hideError);
+        passwordInput.addEventListener('input', hideError);
+
+        console.log('✅ 登录页面加载完成');
+    </script>
+
+</body>
+</html>
