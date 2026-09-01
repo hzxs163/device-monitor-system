@@ -152,7 +152,7 @@ function handleMe({ user }) {
 }
 
 // ================================================================
-// 统一入口
+// 统一入口 - 使用 onRequest 替代 onRequestPost/onRequestGet
 // ================================================================
 
 export async function onRequest(context) {
