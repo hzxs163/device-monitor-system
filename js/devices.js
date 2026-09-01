@@ -11,43 +11,23 @@ import { get, showToast, formatDuration, DEFAULT_PAGE_SIZE } from './utils.js';
 // 状态
 // ================================================================
 
-// 所有设备数据
 let allDevices = [];
-
-// 当前筛选后的设备列表
 let filteredDevices = [];
-
-// 当前类型（'all' 表示全部）
 let currentType = 'all';
-
-// 当前搜索关键词
 let searchKeyword = '';
-
-// 当前页码
 let currentPage = 1;
 
-// 每页数量（导出两个名称，兼容不同模块的导入）
 export const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 export const pageSize = DEFAULT_PAGE_SIZE;
 
-// 设备类型列表
 let typeList = [];
-
-// 当前选中的设备 ID（用于操作）
 let selectedDeviceId = null;
-
-// 回调函数（由 index.html 注册）
 let onDeviceChange = null;
 
 // ================================================================
 // 1. 加载设备列表
 // ================================================================
 
-/**
- * 从服务器加载设备列表
- * @param {boolean} silent - 是否静默加载（不显示 Toast）
- * @returns {Promise<Array>}
- */
 export async function loadDevices(silent = false) {
     try {
         const result = await get('/devices');
@@ -76,9 +56,6 @@ export async function loadDevices(silent = false) {
     }
 }
 
-/**
- * 重新加载设备（强制刷新）
- */
 export async function reloadDevices() {
     return loadDevices(false);
 }
@@ -87,18 +64,13 @@ export async function reloadDevices() {
 // 2. 筛选逻辑
 // ================================================================
 
-/**
- * 应用所有筛选条件
- */
 function applyFilters() {
     let list = [...allDevices];
 
-    // 按类型筛选
     if (currentType !== 'all') {
         list = list.filter(d => d.type === currentType);
     }
 
-    // 按关键词搜索（设备名称或位号）
     if (searchKeyword.trim()) {
         const keyword = searchKeyword.trim().toLowerCase();
         list = list.filter(d =>
@@ -107,7 +79,6 @@ function applyFilters() {
         );
     }
 
-    // 按状态排序（运行中排前面）
     list.sort((a, b) => {
         if (a.status === 1 && b.status !== 1) return -1;
         if (a.status !== 1 && b.status === 1) return 1;
@@ -124,10 +95,6 @@ function applyFilters() {
     }
 }
 
-/**
- * 切换设备类型
- * @param {string} type - 类型名称 或 'all'
- */
 export function switchType(type) {
     if (currentType === type) return;
     currentType = type;
@@ -136,10 +103,6 @@ export function switchType(type) {
     renderAll();
 }
 
-/**
- * 搜索设备
- * @param {string} keyword - 搜索关键词
- */
 export function filterDevices(keyword) {
     searchKeyword = keyword || '';
     currentPage = 1;
@@ -151,25 +114,16 @@ export function filterDevices(keyword) {
 // 3. 分页
 // ================================================================
 
-/**
- * 获取总页数
- */
 export function getTotalPages() {
     return Math.ceil(filteredDevices.length / pageSize) || 1;
 }
 
-/**
- * 获取当前页的设备列表
- */
 export function getCurrentPageDevices() {
     const start = (currentPage - 1) * pageSize;
     const end = start + pageSize;
     return filteredDevices.slice(start, end);
 }
 
-/**
- * 跳转到指定页
- */
 export function goToPage(page) {
     const total = getTotalPages();
     if (page < 1 || page > total) return;
@@ -182,18 +136,12 @@ export function goToPage(page) {
 // 4. 渲染函数
 // ================================================================
 
-/**
- * 渲染所有（设备卡片 + 分页 + 计数）
- */
 export function renderAll() {
     renderDeviceCount();
     renderDevices();
     renderPagination();
 }
 
-/**
- * 渲染设备卡片
- */
 export function renderDevices() {
     const grid = document.getElementById('deviceGrid');
     if (!grid) return;
@@ -263,9 +211,6 @@ export function renderDevices() {
     });
 }
 
-/**
- * 渲染设备类型标签
- */
 export function renderTypeTabs() {
     const container = document.getElementById('typeTabs');
     if (!container) return;
@@ -297,9 +242,6 @@ export function renderTypeTabs() {
     });
 }
 
-/**
- * 渲染分页
- */
 export function renderPagination() {
     const container = document.getElementById('pagination');
     if (!container) return;
@@ -339,9 +281,6 @@ export function renderPagination() {
     });
 }
 
-/**
- * 渲染设备计数
- */
 export function renderDeviceCount() {
     const el = document.getElementById('deviceCount');
     if (el) {
