@@ -26,8 +26,9 @@ let searchKeyword = '';
 // 当前页码
 let currentPage = 1;
 
-// 每页数量
+// 每页数量（导出两个名称，兼容不同模块的导入）
 export const PAGE_SIZE = DEFAULT_PAGE_SIZE;
+export const pageSize = DEFAULT_PAGE_SIZE;
 
 // 设备类型列表
 let typeList = [];
@@ -60,10 +61,8 @@ export async function loadDevices(silent = false) {
             return [];
         }
 
-        allDevices = result.data || [];
-        // 同时更新设备类型列表
-        typeList = result.types || [];
-        // 重新应用筛选
+        allDevices = result.data?.devices || [];
+        typeList = result.data?.types || [];
         applyFilters();
         return allDevices;
     } catch (error) {
@@ -117,7 +116,6 @@ function applyFilters() {
 
     filteredDevices = list;
 
-    // 如果当前页超出范围，回到第一页
     const totalPages = getTotalPages();
     if (currentPage > totalPages && totalPages > 0) {
         currentPage = totalPages;
@@ -157,15 +155,15 @@ export function filterDevices(keyword) {
  * 获取总页数
  */
 export function getTotalPages() {
-    return Math.ceil(filteredDevices.length / PAGE_SIZE) || 1;
+    return Math.ceil(filteredDevices.length / pageSize) || 1;
 }
 
 /**
  * 获取当前页的设备列表
  */
 export function getCurrentPageDevices() {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const end = start + PAGE_SIZE;
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
     return filteredDevices.slice(start, end);
 }
 
@@ -221,7 +219,6 @@ export function renderDevices() {
             ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
             : '--';
 
-        // 操作按钮
         const actionBtn = isRunning
             ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
             : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
@@ -251,7 +248,6 @@ export function renderDevices() {
         `;
     }).join('');
 
-    // 绑定卡片按钮事件
     grid.querySelectorAll('[data-action]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -274,7 +270,6 @@ export function renderTypeTabs() {
     const container = document.getElementById('typeTabs');
     if (!container) return;
 
-    // 从 allDevices 中提取类型
     const types = getAllTypes();
 
     let html = `
@@ -294,7 +289,6 @@ export function renderTypeTabs() {
 
     container.innerHTML = html;
 
-    // 绑定点击事件
     container.querySelectorAll('.type-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             const type = tab.dataset.type;
@@ -320,10 +314,8 @@ export function renderPagination() {
 
     let html = '';
 
-    // 上一页
     html += `<button class="page-btn" data-page="${current - 1}" ${current <= 1 ? 'disabled' : ''}>◀</button>`;
 
-    // 页码
     const pages = getPageRange(current, total);
     pages.forEach(p => {
         if (p === '...') {
@@ -333,12 +325,10 @@ export function renderPagination() {
         }
     });
 
-    // 下一页
     html += `<button class="page-btn" data-page="${current + 1}" ${current >= total ? 'disabled' : ''}>▶</button>`;
 
     container.innerHTML = html;
 
-    // 绑定点击事件
     container.querySelectorAll('.page-btn:not([disabled])').forEach(btn => {
         btn.addEventListener('click', () => {
             const page = parseInt(btn.dataset.page);
@@ -365,9 +355,6 @@ export function renderDeviceCount() {
 // 5. 辅助函数
 // ================================================================
 
-/**
- * 从设备列表中提取所有类型
- */
 function getAllTypes() {
     const types = new Set();
     allDevices.forEach(d => {
@@ -375,23 +362,18 @@ function getAllTypes() {
             types.add(d.type);
         }
     });
-    // 按字母排序
     return Array.from(types).sort();
 }
 
-/**
- * 获取页码范围
- */
 function getPageRange(current, total) {
     const range = [];
-    const show = 5; // 最多显示 5 个页码
+    const show = 5;
 
     if (total <= show) {
         for (let i = 1; i <= total; i++) range.push(i);
         return range;
     }
 
-    // 总是显示第一页
     range.push(1);
 
     let start = Math.max(2, current - 1);
@@ -408,15 +390,11 @@ function getPageRange(current, total) {
     for (let i = start; i <= end; i++) range.push(i);
     if (end < total - 1) range.push('...');
 
-    // 总是显示最后一页
     if (total > 1) range.push(total);
 
     return range;
 }
 
-/**
- * HTML 转义
- */
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -428,49 +406,32 @@ function escapeHtml(text) {
 // 6. 操作处理（开机/停机）
 // ================================================================
 
-/**
- * 处理开机操作
- */
 async function handleStart(deviceId) {
-    // 导入 operations 模块（避免循环依赖）
     const { startDevice } = await import('./operations.js');
     await startDevice(deviceId);
 }
 
-/**
- * 处理停机操作
- */
 async function handleStop(deviceId) {
     const { stopDevice } = await import('./operations.js');
     await stopDevice(deviceId);
 }
 
 // ================================================================
-// 7. 设备状态更新（由 operations.js 调用）
+// 7. 设备状态更新
 // ================================================================
 
-/**
- * 更新单个设备的状态（本地更新，不重新加载）
- * @param {number} deviceId - 设备 ID
- * @param {object} updates - 更新字段 { status, current_start_time }
- */
 export function updateDeviceLocal(deviceId, updates) {
     const device = allDevices.find(d => d.id === deviceId);
     if (device) {
         Object.assign(device, updates);
-        // 重新应用筛选并渲染
         applyFilters();
         renderAll();
-        // 通知统计模块更新
         if (onDeviceChange) {
             onDeviceChange();
         }
     }
 }
 
-/**
- * 注册设备变更回调
- */
 export function onDeviceChangeCallback(callback) {
     onDeviceChange = callback;
 }
@@ -484,6 +445,7 @@ export {
     filteredDevices,
     currentType,
     currentPage,
+    pageSize,
     searchKeyword,
     typeList,
 };
@@ -507,6 +469,7 @@ export default {
     filteredDevices,
     currentType,
     currentPage,
+    pageSize,
     searchKeyword,
     typeList,
 };
