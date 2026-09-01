@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>设备运行监控系统</title>
+    <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+    <!-- ============================================================ -->
+    <!-- 顶部导航 -->
+    <!-- ============================================================ -->
+    <header class="app-header">
+        <div class="header-left">
+            <span class="logo">🏭</span>
+            <span class="app-title">设备运行监控</span>
+        </div>
+        <div class="header-right">
+            <span class="user-info" id="userDisplay">
+                <span class="user-name" id="userName">加载中...</span>
+                <span class="user-role" id="userRole">普通用户</span>
+            </span>
+            <button class="btn btn-logout" id="logoutBtn">退出</button>
+        </div>
+    </header>
+
+    <!-- ============================================================ -->
+    <!-- 统计栏 -->
+    <!-- ============================================================ -->
+    <div class="stats-bar">
+        <div class="stats-item">
+            <span class="stats-label">📅</span>
+            <span class="stats-value" id="currentMonth">2026年9月</span>
+        </div>
+        <div class="stats-item">
+            <span class="stats-label">本月总运行</span>
+            <span class="stats-value" id="totalHours">0 小时</span>
+        </div>
+        <div class="stats-item">
+            <span class="stats-label">运行中</span>
+            <span class="stats-value" id="runningCount">0 台</span>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 设备类型标签栏 -->
+    <!-- ============================================================ -->
+    <nav class="type-tabs" id="typeTabs">
+        <!-- JS 动态渲染 -->
+    </nav>
+
+    <!-- ============================================================ -->
+    <!-- 工具栏 -->
+    <!-- ============================================================ -->
+    <div class="toolbar">
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 搜索设备名称或位号..." />
+        </div>
+        <div class="toolbar-right">
+            <span class="device-count" id="deviceCount">共 0 台</span>
+            <button class="btn btn-admin" id="adminEntryBtn" style="display:none;">⚙️ 管理</button>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 设备卡片网格 -->
+    <!-- ============================================================ -->
+    <div class="device-grid" id="deviceGrid">
+        <!-- JS 动态渲染 -->
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 分页 -->
+    <!-- ============================================================ -->
+    <div class="pagination" id="pagination">
+        <!-- JS 动态渲染 -->
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 月统计报表区域 -->
+    <!-- ============================================================ -->
+    <section class="statistics-section" id="statisticsSection">
+        <div class="section-header">
+            <h2>📊 本月运行统计</h2>
+            <button class="btn btn-export" id="exportBtn">📥 导出 Excel</button>
+        </div>
+
+        <!-- 类型汇总 -->
+        <div class="type-summary" id="typeSummary">
+            <!-- JS 动态渲染 -->
+        </div>
+
+        <!-- 设备排行 -->
+        <div class="rank-table-wrapper">
+            <h3>🏆 设备运行时长排行</h3>
+            <div class="rank-table-container" id="rankTable">
+                <!-- JS 动态渲染 -->
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 管理弹窗（设备管理 / 用户管理 / 类型管理） -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="modalOverlay" style="display:none;">
+        <div class="modal" id="modalContent">
+            <!-- JS 动态渲染 -->
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Toast 提示 -->
+    <!-- ============================================================ -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ============================================================ -->
+    <!-- JavaScript -->
+    <!-- ============================================================ -->
+    <script type="module">
+        // ============================================================
+        // 模块导入
+        // ============================================================
+        import { API_BASE, get, post, put, del } from '/js/utils.js';
+        import { login, logout, getCurrentUser, checkAuth } from '/js/auth.js';
+        import {
+            loadDevices,
+            renderDevices,
+            renderTypeTabs,
+            renderPagination,
+            filterDevices,
+            switchType,
+            currentPage,
+            pageSize,
+            currentType,
+            searchKeyword
+        } from '/js/devices.js';
+        import { startDevice, stopDevice } from '/js/operations.js';
+        import { loadStatistics, renderTypeSummary, renderRankTable } from '/js/statistics.js';
+        import {
+            renderAdminPanel,
+            renderUserManagement,
+            renderTypeManagement,
+            showAddDeviceModal,
+            showEditDeviceModal,
+            showAddUserModal,
+            showEditUserModal,
+            showAddTypeModal
+        } from '/js/admin.js';
+
+        // ============================================================
+        // 全局状态
+        // ============================================================
+        let currentUser = null;
+
+        // ============================================================
+        // DOM 引用
+        // ============================================================
+        const $ = (sel) => document.querySelector(sel);
+        const $$ = (sel) => document.querySelectorAll(sel);
+
+        const userDisplay = $('#userDisplay');
+        const userName = $('#userName');
+        const userRole = $('#userRole');
+        const logoutBtn = $('#logoutBtn');
+        const currentMonth = $('#currentMonth');
+        const totalHours = $('#totalHours');
+        const runningCount = $('#runningCount');
+        const typeTabs = $('#typeTabs');
+        const searchInput = $('#searchInput');
+        const deviceCount = $('#deviceCount');
+        const deviceGrid = $('#deviceGrid');
+        const pagination = $('#pagination');
+        const adminEntryBtn = $('#adminEntryBtn');
+        const exportBtn = $('#exportBtn');
+        const modalOverlay = $('#modalOverlay');
+        const modalContent = $('#modalContent');
+        const toastContainer = $('#toastContainer');
+
+        // ============================================================
+        // 页面初始化
+        // ============================================================
+        async function init() {
+            // 1. 检查登录状态
+            const user = await checkAuth();
+            if (!user) {
+                window.location.href = '/login.html';
+                return;
+            }
+            currentUser = user;
+            renderUserInfo(user);
+
+            // 2. 设置当前月份
+            const now = new Date();
+            currentMonth.textContent = `${now.getFullYear()}年${now.getMonth() + 1}月`;
+
+            // 3. 加载设备列表
+            await loadDevices();
+
+            // 4. 渲染类型标签
+            renderTypeTabs();
+
+            // 5. 渲染设备列表
+            renderDevices();
+
+            // 6. 加载统计数据
+            await loadStatistics();
+            renderTypeSummary();
+            renderRankTable();
+
+            // 7. 更新统计栏
+            updateStatsBar();
+
+            // 8. 管理员入口
+            if (user.role === 'admin') {
+                adminEntryBtn.style.display = 'inline-block';
+            }
+
+            // 9. 绑定事件
+            bindEvents();
+
+            // 10. 初始化完成
+            console.log('✅ 设备运行监控系统初始化完成');
+        }
+
+        // ============================================================
+        // 渲染用户信息
+        // ============================================================
+        function renderUserInfo(user) {
+            userName.textContent = user.nickname || user.username;
+            userRole.textContent = user.role === 'admin' ? '管理员' : '普通用户';
+        }
+
+        // ============================================================
+        // 更新统计栏
+        // ============================================================
+        function updateStatsBar() {
+            // 从全局设备列表计算
+            const devices = window.__devices || [];
+            const running = devices.filter(d => d.status === 1 && !d.is_deleted).length;
+            runningCount.textContent = `${running} 台`;
+
+            // 总运行时长从统计模块获取
+            const total = window.__statTotalHours || 0;
+            totalHours.textContent = `${total} 小时`;
+        }
+
+        // ============================================================
+        // 绑定事件
+        // ============================================================
+        function bindEvents() {
+            // 退出登录
+            logoutBtn.addEventListener('click', () => {
+                logout();
+                window.location.href = '/login.html';
+            });
+
+            // 搜索输入（防抖）
+            let searchTimer;
+            searchInput.addEventListener('input', () => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => {
+                    const keyword = searchInput.value.trim();
+                    filterDevices(keyword);
+                }, 300);
+            });
+
+            // 管理员入口
+            adminEntryBtn.addEventListener('click', () => {
+                showAdminPanel();
+            });
+
+            // 导出 Excel
+            exportBtn.addEventListener('click', () => {
+                exportExcel();
+            });
+
+            // 点击模态框外部关闭
+            modalOverlay.addEventListener('click', (e) => {
+                if (e.target === modalOverlay) {
+                    closeModal();
+                }
+            });
+        }
+
+        // ============================================================
+        // 管理员面板
+        // ============================================================
+        function showAdminPanel() {
+            // 渲染管理面板（包含设备管理、用户管理、类型管理三个 Tab）
+            // 由 admin.js 处理
+            renderAdminPanel();
+        }
+
+        // ============================================================
+        // 导出 Excel
+        // ============================================================
+        function exportExcel() {
+            // 由 utils.js 处理
+            const { exportToExcel } = require('/js/utils.js'); // 实际使用 import
+            // 简化：直接调用全局函数
+            if (typeof exportToExcel === 'function') {
+                exportToExcel();
+            } else {
+                console.warn('导出功能未加载');
+            }
+        }
+
+        // ============================================================
+        // 模态框控制（暴露给其他模块）
+        // ============================================================
+        window.openModal = function(html) {
+            modalContent.innerHTML = html;
+            modalOverlay.style.display = 'flex';
+        };
+
+        window.closeModal = function() {
+            modalOverlay.style.display = 'none';
+        };
+
+        // ============================================================
+        // Toast 提示（暴露给其他模块）
+        // ============================================================
+        window.showToast = function(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('fade-out');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        };
+
+        // ============================================================
+        // 重新加载设备（暴露给其他模块）
+        // ============================================================
+        window.reloadDevices = async function() {
+            await loadDevices();
+            renderDevices();
+            await loadStatistics();
+            renderTypeSummary();
+            renderRankTable();
+            updateStatsBar();
+        };
+
+        // ============================================================
+        // 启动应用
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+
+</body>
+</html>
