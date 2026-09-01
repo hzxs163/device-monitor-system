@@ -10,10 +10,47 @@ import { verifyPassword } from '../utils/password.js';
 import { success, error, unauthorized, parseJSON } from '../utils/response.js';
 
 // ================================================================
-// 1. POST /api/auth/login - 登录
+// 辅助函数：根据用户名查询用户
 // ================================================================
 
-export async function onRequestPost({ request, env }) {
+async function getUserByUsername(username, env) {
+    try {
+        const stmt = env.DB.prepare(`
+            SELECT id, username, nickname, password_hash, password_salt, role, is_active
+            FROM users
+            WHERE username = ?
+        `);
+        const result = await stmt.bind(username).first();
+
+        if (!result) {
+            // 再查一次不限制 is_active，用于判断账号是否被禁用
+            const stmtAll = env.DB.prepare(`
+                SELECT id, username, nickname, password_hash, password_salt, role, is_active
+                FROM users
+                WHERE username = ?
+            `);
+            const allResult = await stmtAll.bind(username).first();
+            if (allResult && allResult.is_active === 0) {
+                return { ...allResult, is_active: 0 };
+            }
+            return null;
+        }
+
+        return result;
+    } catch (error) {
+        console.error('[Auth] 查询用户失败:', error);
+        return null;
+    }
+}
+
+// ================================================================
+// 处理函数
+// ================================================================
+
+/**
+ * 登录处理
+ */
+async function handleLogin(request, env) {
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
@@ -21,7 +58,6 @@ export async function onRequestPost({ request, env }) {
 
     const { username, password } = body;
 
-    // 参数校验
     if (!username || !password) {
         return error('用户名和密码不能为空', 400);
     }
@@ -29,24 +65,20 @@ export async function onRequestPost({ request, env }) {
         return error('用户名格式不合法（仅限字母、数字、下划线）', 400);
     }
 
-    // 查询用户
     const user = await getUserByUsername(username, env);
     if (!user) {
         return error('用户名或密码错误', 401);
     }
 
-    // 检查用户是否被禁用
     if (user.is_active === 0) {
         return error('账号已被禁用，请联系管理员', 403);
     }
 
-    // 验证密码
     const isValid = await verifyPassword(password, user.password_hash, user.password_salt);
     if (!isValid) {
         return error('用户名或密码错误', 401);
     }
 
-    // 签发 JWT
     const token = await signJWT(
         {
             id: user.id,
@@ -57,7 +89,6 @@ export async function onRequestPost({ request, env }) {
         env
     );
 
-    // 返回用户信息 + 设置 cookie
     const userData = {
         id: user.id,
         username: user.username,
@@ -65,7 +96,6 @@ export async function onRequestPost({ request, env }) {
         role: user.role || 'user',
     };
 
-    // 设置 HttpOnly cookie（安全，前端无法通过 JS 读取）
     const cookie = `token=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${60 * 60 * 24 * 7}`;
 
     return new Response(
@@ -84,12 +114,10 @@ export async function onRequestPost({ request, env }) {
     );
 }
 
-// ================================================================
-// 2. POST /api/auth/logout - 登出
-// ================================================================
-
-export async function onRequestPostLogout() {
-    // 清除 cookie（设置过期时间为过去）
+/**
+ * 登出处理
+ */
+function handleLogout() {
     const cookie = 'token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0';
 
     return new Response(
@@ -107,11 +135,10 @@ export async function onRequestPostLogout() {
     );
 }
 
-// ================================================================
-// 3. GET /api/auth/me - 获取当前用户信息
-// ================================================================
-
-export async function onRequestGetMe({ user }) {
+/**
+ * 获取当前用户信息
+ */
+function handleMe({ user }) {
     if (!user) {
         return unauthorized('请先登录');
     }
@@ -125,74 +152,37 @@ export async function onRequestGetMe({ user }) {
 }
 
 // ================================================================
-// 路由分发（Pages Functions 根据请求方法自动匹配）
+// 统一入口
 // ================================================================
 
-/**
- * POST 请求路由分发
- */
-export async function onRequestPost(context) {
-    const { request } = context;
+export async function onRequest(context) {
+    const { request, env, user } = context;
     const url = new URL(request.url);
+    const method = request.method;
 
     // /api/auth/logout
     if (url.pathname === '/api/auth/logout') {
-        return onRequestPostLogout();
+        if (method === 'POST') {
+            return handleLogout();
+        }
+        return error('方法不允许', 405);
     }
-
-    // /api/auth/login (默认)
-    return onRequestPost(context);
-}
-
-/**
- * GET 请求路由分发
- */
-export async function onRequestGet(context) {
-    const { request } = context;
-    const url = new URL(request.url);
 
     // /api/auth/me
     if (url.pathname === '/api/auth/me') {
-        return onRequestGetMe(context);
+        if (method === 'GET') {
+            return handleMe(context);
+        }
+        return error('方法不允许', 405);
+    }
+
+    // /api/auth/login (默认)
+    if (url.pathname === '/api/auth/login') {
+        if (method === 'POST') {
+            return handleLogin(request, env);
+        }
+        return error('方法不允许', 405);
     }
 
     return error('接口不存在', 404);
-}
-
-// ================================================================
-// 辅助函数
-// ================================================================
-
-/**
- * 根据用户名查询用户
- */
-async function getUserByUsername(username, env) {
-    try {
-        const stmt = env.DB.prepare(`
-            SELECT id, username, nickname, password_hash, password_salt, role, is_active
-            FROM users
-            WHERE username = ? AND is_active = 1
-        `);
-        const result = await stmt.bind(username).first();
-
-        if (!result) {
-            // 再查一次不限制 is_active，用于判断账号是否被禁用
-            const stmtAll = env.DB.prepare(`
-                SELECT id, username, nickname, password_hash, password_salt, role, is_active
-                FROM users
-                WHERE username = ?
-            `);
-            const allResult = await stmtAll.bind(username).first();
-            if (allResult && allResult.is_active === 0) {
-                // 账号被禁用，返回特殊标记
-                return { ...allResult, is_active: 0 };
-            }
-            return null;
-        }
-
-        return result;
-    } catch (error) {
-        console.error('[Auth] 查询用户失败:', error);
-        return null;
-    }
 }
