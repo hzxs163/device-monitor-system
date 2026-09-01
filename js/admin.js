@@ -697,6 +697,13 @@ async function refreshAll() {
 // ================================================================
 // 8. 导出
 // ================================================================
+// ================================================================
+// 导出
+// ================================================================
+
+export {
+    renderTypeManagement,
+};
 
 export default {
     renderAdminPanel,
@@ -708,4 +715,5 @@ export default {
     toggleUser,
     showAddTypeModal,
     deleteType,
+    renderTypeManagement,
 };
