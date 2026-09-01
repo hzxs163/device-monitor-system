@@ -22,6 +22,7 @@ let onDeviceChange = null;
 
 // 每页数量
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
+export const pageSize = DEFAULT_PAGE_SIZE;   // ← 定义了！
 
 // ================================================================
 // 1. 加载设备列表
@@ -375,7 +376,7 @@ export function onDeviceChangeCallback(callback) {
 }
 
 // ================================================================
-// 8. 导出 - 只有这里导出 pageSize，其他地方都不许有！
+// 8. 导出
 // ================================================================
 
 export {
