@@ -20,9 +20,8 @@ let typeList = [];
 let selectedDeviceId = null;
 let onDeviceChange = null;
 
-// 每页数量 - 只导出一次
-export const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-export const pageSize = DEFAULT_PAGE_SIZE;
+// 每页数量
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 // ================================================================
 // 1. 加载设备列表
@@ -115,12 +114,12 @@ export function filterDevices(keyword) {
 // ================================================================
 
 export function getTotalPages() {
-    return Math.ceil(filteredDevices.length / pageSize) || 1;
+    return Math.ceil(filteredDevices.length / PAGE_SIZE) || 1;
 }
 
 export function getCurrentPageDevices() {
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
     return filteredDevices.slice(start, end);
 }
 
@@ -376,7 +375,7 @@ export function onDeviceChangeCallback(callback) {
 }
 
 // ================================================================
-// 8. 导出
+// 8. 导出 - 只有这里导出 pageSize，其他地方都不许有！
 // ================================================================
 
 export {
@@ -408,7 +407,6 @@ export default {
     filteredDevices,
     currentType,
     currentPage,
-    // pageSize  ← 这一行删掉！不要在这里导出
     searchKeyword,
     typeList,
 };
