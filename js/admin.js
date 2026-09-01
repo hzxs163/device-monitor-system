@@ -640,25 +640,10 @@ async function refreshAll() {
 }
 
 // ================================================================
-// 8. 导出 - 所有函数只在这里导出一份
+// 8. 导出 - 只导出一份，没有重复
 // ================================================================
 
 export {
-    renderAdminPanel,
-    renderDeviceManagement,
-    renderUserManagement,
-    renderTypeManagement,
-    showAddDeviceModal,
-    showEditDeviceModal,
-    deleteDevice,
-    showAddUserModal,
-    showEditUserModal,
-    toggleUser,
-    showAddTypeModal,
-    deleteType,
-};
-
-export default {
     renderAdminPanel,
     renderDeviceManagement,
     renderUserManagement,
