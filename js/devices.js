@@ -376,7 +376,7 @@ export function onDeviceChangeCallback(callback) {
 }
 
 // ================================================================
-// 8. 导出 - 只导出一份 pageSize
+// 8. 导出
 // ================================================================
 
 export {
@@ -408,6 +408,7 @@ export default {
     filteredDevices,
     currentType,
     currentPage,
+    // pageSize  ← 这一行删掉！不要在这里导出
     searchKeyword,
     typeList,
 };
