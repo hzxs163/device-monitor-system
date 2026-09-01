@@ -16,13 +16,13 @@ let filteredDevices = [];
 let currentType = 'all';
 let searchKeyword = '';
 let currentPage = 1;
-
-export const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-export const pageSize = DEFAULT_PAGE_SIZE;
-
 let typeList = [];
 let selectedDeviceId = null;
 let onDeviceChange = null;
+
+// 每页数量 - 只导出一次
+export const PAGE_SIZE = DEFAULT_PAGE_SIZE;
+export const pageSize = DEFAULT_PAGE_SIZE;
 
 // ================================================================
 // 1. 加载设备列表
@@ -376,7 +376,7 @@ export function onDeviceChangeCallback(callback) {
 }
 
 // ================================================================
-// 8. 导出
+// 8. 导出 - 只导出一份 pageSize
 // ================================================================
 
 export {
