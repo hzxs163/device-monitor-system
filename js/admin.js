@@ -17,9 +17,6 @@ import { loadStatistics, renderTypeSummary, renderRankTable } from './statistics
 // 1. 权限检查
 // ================================================================
 
-/**
- * 检查当前用户是否为管理员，非管理员则提示并返回
- */
 async function requireAdmin() {
     const admin = await isAdmin();
     if (!admin) {
@@ -33,9 +30,6 @@ async function requireAdmin() {
 // 2. 管理面板
 // ================================================================
 
-/**
- * 渲染管理面板（含三个 Tab）
- */
 export async function renderAdminPanel() {
     if (!await requireAdmin()) return;
 
@@ -59,10 +53,8 @@ export async function renderAdminPanel() {
 
     openModal(html);
 
-    // 默认加载设备管理
     renderDeviceManagement();
 
-    // 绑定 Tab 切换事件
     document.querySelectorAll('.admin-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
@@ -87,14 +79,10 @@ export async function renderAdminPanel() {
 // 3. 设备管理
 // ================================================================
 
-/**
- * 渲染设备管理列表
- */
-async function renderDeviceManagement() {
+export async function renderDeviceManagement() {
     const container = document.getElementById('adminTabContent');
     if (!container) return;
 
-    // 加载设备列表
     const devices = window.__devices || [];
 
     const html = `
@@ -142,7 +130,6 @@ async function renderDeviceManagement() {
 
     container.innerHTML = html;
 
-    // 注册全局函数
     window._adminAddDevice = showAddDeviceModal;
     window._adminEditDevice = showEditDeviceModal;
     window._adminDeleteDevice = deleteDevice;
@@ -152,13 +139,9 @@ async function renderDeviceManagement() {
 // 4. 设备 CRUD
 // ================================================================
 
-/**
- * 显示添加设备弹窗
- */
 export async function showAddDeviceModal() {
     if (!await requireAdmin()) return;
 
-    // 获取类型列表
     const types = await getDeviceTypes();
 
     const html = `
@@ -221,9 +204,6 @@ export async function showAddDeviceModal() {
     });
 }
 
-/**
- * 显示编辑设备弹窗
- */
 export async function showEditDeviceModal(deviceId) {
     if (!await requireAdmin()) return;
 
@@ -294,9 +274,6 @@ export async function showEditDeviceModal(deviceId) {
     });
 }
 
-/**
- * 删除设备（软删除）
- */
 export async function deleteDevice(deviceId) {
     if (!await requireAdmin()) return;
 
@@ -315,10 +292,7 @@ export async function deleteDevice(deviceId) {
 // 5. 用户管理
 // ================================================================
 
-/**
- * 渲染用户管理列表
- */
-async function renderUserManagement() {
+export async function renderUserManagement() {
     const container = document.getElementById('adminTabContent');
     if (!container) return;
 
@@ -375,9 +349,6 @@ async function renderUserManagement() {
     window._adminToggleUser = toggleUser;
 }
 
-/**
- * 显示添加用户弹窗
- */
 export async function showAddUserModal() {
     if (!await requireAdmin()) return;
 
@@ -445,9 +416,6 @@ export async function showAddUserModal() {
     });
 }
 
-/**
- * 显示编辑用户弹窗
- */
 export async function showEditUserModal(userId) {
     if (!await requireAdmin()) return;
 
@@ -517,9 +485,6 @@ export async function showEditUserModal(userId) {
     });
 }
 
-/**
- * 启用/禁用用户
- */
 export async function toggleUser(userId, newStatus) {
     if (!await requireAdmin()) return;
 
@@ -539,18 +504,12 @@ export async function toggleUser(userId, newStatus) {
 // 6. 设备类型管理
 // ================================================================
 
-/**
- * 获取设备类型列表
- */
 async function getDeviceTypes() {
     const result = await get('/types');
     return result.success ? (result.data || []) : [];
 }
 
-/**
- * 渲染类型管理
- */
-async function renderTypeManagement() {
+export async function renderTypeManagement() {
     const container = document.getElementById('adminTabContent');
     if (!container) return;
 
@@ -587,9 +546,6 @@ async function renderTypeManagement() {
     window._adminDeleteType = deleteType;
 }
 
-/**
- * 显示添加类型弹窗
- */
 export async function showAddTypeModal() {
     if (!await requireAdmin()) return;
 
@@ -628,7 +584,6 @@ export async function showAddTypeModal() {
             showToast('✅ 类型添加成功', 'success');
             closeModal();
             renderTypeManagement();
-            // 刷新类型标签
             await loadDevices(true);
             renderTypeTabs();
         } else {
@@ -637,9 +592,6 @@ export async function showAddTypeModal() {
     });
 }
 
-/**
- * 删除设备类型
- */
 export async function deleteType(typeId) {
     if (!await requireAdmin()) return;
 
@@ -660,9 +612,6 @@ export async function deleteType(typeId) {
 // 7. 工具函数
 // ================================================================
 
-/**
- * HTML 转义
- */
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -670,9 +619,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-/**
- * 刷新所有页面数据
- */
 async function refreshAll() {
     await loadDevices(true);
     renderAll();
@@ -681,7 +627,6 @@ async function refreshAll() {
     renderTypeSummary();
     renderRankTable();
 
-    // 更新统计栏
     const totalHoursEl = document.getElementById('totalHours');
     const runningCountEl = document.getElementById('runningCount');
     if (totalHoursEl) {
@@ -695,7 +640,7 @@ async function refreshAll() {
 }
 
 // ================================================================
-// 8. 导出
+// 8. 导出 - 所有函数只在这里导出一份
 // ================================================================
 
 export {
