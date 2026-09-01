@@ -22,7 +22,6 @@ let onDeviceChange = null;
 
 // 每页数量
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-export const pageSize = DEFAULT_PAGE_SIZE;   // ← 定义了！
 
 // ================================================================
 // 1. 加载设备列表
