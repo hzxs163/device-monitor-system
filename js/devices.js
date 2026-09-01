@@ -469,7 +469,6 @@ export default {
     filteredDevices,
     currentType,
     currentPage,
-    pageSize,
     searchKeyword,
     typeList,
 };
