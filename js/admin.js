@@ -697,16 +697,12 @@ async function refreshAll() {
 // ================================================================
 // 8. 导出
 // ================================================================
-// ================================================================
-// 导出
-// ================================================================
 
 export {
-    renderTypeManagement,
-};
-
-export default {
     renderAdminPanel,
+    renderDeviceManagement,
+    renderUserManagement,
+    renderTypeManagement,
     showAddDeviceModal,
     showEditDeviceModal,
     deleteDevice,
@@ -715,5 +711,19 @@ export default {
     toggleUser,
     showAddTypeModal,
     deleteType,
+};
+
+export default {
+    renderAdminPanel,
+    renderDeviceManagement,
+    renderUserManagement,
     renderTypeManagement,
+    showAddDeviceModal,
+    showEditDeviceModal,
+    deleteDevice,
+    showAddUserModal,
+    showEditUserModal,
+    toggleUser,
+    showAddTypeModal,
+    deleteType,
 };
