@@ -9,12 +9,18 @@ import { success, error } from '../utils/response.js';
 
 // GET /api/operations - 获取操作日志
 export async function onRequestGet({ request, env, user }) {
-    if (!user) {
-        return error('请先登录', 401);
-    }
+    // 临时去掉权限检查
+    // if (!user) {
+    //     return error('请先登录', 401);
+    // }
 
     const url = new URL(request.url);
     const limit = parseInt(url.searchParams.get('limit')) || 20;
+
+    // 如果没有用户信息，返回空数据
+    if (!user) {
+        return success([]);
+    }
 
     try {
         let stmt;
