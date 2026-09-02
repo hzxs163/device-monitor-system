@@ -172,12 +172,13 @@ export async function onRequestPut({ request, env, params }) {
         // 更新设备
         const updateStmt = env.DB.prepare(`
             UPDATE devices
-            SET name = ?, tag = ?, type_id = ?, location = ?, updated_at = unixepoch()
+            SET name = ?, tag = ?, type_id = ?, location = ?
             WHERE id = ?
         `);
         await updateStmt
             .bind(name.trim(), tag.trim(), typeId, location?.trim() || null, deviceId)
             .run();
+
 
         return success({ id: deviceId }, '设备更新成功');
     } catch (err) {
