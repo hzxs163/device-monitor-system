@@ -5,17 +5,13 @@
  * ================================================================
  */
 
-import { success, error, unauthorized, forbidden, parseJSON } from '../utils/response.js';
+import { success, error, parseJSON } from '../utils/response.js';
 
 // ================================================================
 // 1. POST /api/records/start - 开机
 // ================================================================
 
 export async function onRequestPostStart({ request, env, user }) {
-    if (!user) {
-        return unauthorized('请先登录');
-    }
-
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
@@ -47,13 +43,14 @@ export async function onRequestPostStart({ request, env, user }) {
 
         // 3. 获取当前时间戳（秒）
         const now = Math.floor(Date.now() / 1000);
+        const operatorId = user?.id || 'system';
 
         // 4. 插入运行记录
         const insertStmt = env.DB.prepare(`
             INSERT INTO run_records (device_id, start_time, operator_id)
             VALUES (?, ?, ?)
         `);
-        const result = await insertStmt.bind(deviceId, now, user.id).run();
+        const result = await insertStmt.bind(deviceId, now, operatorId).run();
 
         // 5. 更新设备状态
         const updateStmt = env.DB.prepare(`
@@ -79,10 +76,6 @@ export async function onRequestPostStart({ request, env, user }) {
 // ================================================================
 
 export async function onRequestPostStop({ request, env, user }) {
-    if (!user) {
-        return unauthorized('请先登录');
-    }
-
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
@@ -169,11 +162,7 @@ export async function onRequestPostStop({ request, env, user }) {
 // 3. GET /api/records/status/:id - 获取设备运行状态
 // ================================================================
 
-export async function onRequestGetStatus({ env, user, params }) {
-    if (!user) {
-        return unauthorized('请先登录');
-    }
-
+export async function onRequestGetStatus({ env, params }) {
     const deviceId = parseInt(params.id);
     if (!deviceId || isNaN(deviceId)) {
         return error('无效的设备 ID', 400);
@@ -215,7 +204,7 @@ export async function onRequestGetStatus({ env, user, params }) {
 // ================================================================
 
 export async function onRequest(context) {
-    const { request, params } = context;
+    const { request } = context;
     const url = new URL(request.url);
     const method = request.method;
 
