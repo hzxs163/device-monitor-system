@@ -19,6 +19,7 @@ export async function onRequestGet({ env }) {
                 d.id,
                 d.name,
                 d.tag,
+                d.model,
                 d.type_id,
                 dt.name as type,
                 d.location,
