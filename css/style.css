@@ -502,8 +502,10 @@ body.login-page {
     gap: 8px;
 }
 
+/* 改成整个卡片背景绿色 */
 .device-card.running {
-    border-left-color: var(--running);
+    background: #dcfce7;
+    border: 1px solid #22c55e;
 }
 
 .device-card .card-row {
