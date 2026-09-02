@@ -1201,3 +1201,86 @@ body.login-page {
 .flex-center { display: flex; align-items: center; justify-content: center; }
 .gap-8 { gap: 8px; }
 .gap-12 { gap: 12px; }
+
+
+/* ================================================================
+   设备类型分组容器
+   ================================================================ */
+
+/* 每个类型分组 */
+.type-group {
+    margin-bottom: 24px;
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid #e9edf4;
+}
+
+/* 分组标题栏 */
+.type-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #e2e8f0;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* 类型名称 */
+.type-group-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+/* 统计数字 */
+.type-group-stats {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+}
+
+.type-group-count {
+    color: #64748b;
+}
+
+.type-group-running {
+    color: #22c55e;
+    font-weight: 500;
+}
+
+.type-group-stopped {
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+/* 组内卡片网格（复用设备卡片样式） */
+.type-group-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 1fr;
+}
+
+/* 响应式：平板 */
+@media (min-width: 640px) {
+    .type-group-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* 响应式：桌面 */
+@media (min-width: 1024px) {
+    .type-group-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* 响应式：大屏 */
+@media (min-width: 1400px) {
+    .type-group-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
