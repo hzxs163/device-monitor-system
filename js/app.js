@@ -5,7 +5,7 @@
  * ================================================================
  */
 
-import { checkAuth, getCurrentUser, logout } from './auth.js';
+import { logout } from './auth.js';
 import { loadDevices, renderAll, renderTypeTabs, onDeviceChangeCallback } from './devices.js';
 import { loadStatistics, renderTypeSummary, renderRankTable } from './statistics.js';
 import { showToast } from './utils.js';
@@ -14,7 +14,6 @@ import { showToast } from './utils.js';
 // 全局状态
 // ================================================================
 
-// 暴露设备列表到全局，供其他模块使用
 window.__devices = [];
 window.__statTotalHours = 0;
 window.__currentUser = null;
@@ -23,57 +22,30 @@ window.__currentUser = null;
 // 应用初始化
 // ================================================================
 
-/**
- * 应用主入口
- */
 export async function initApp() {
     try {
         // ============================================================
-        // 新增：先从 localStorage 恢复用户信息
+        // 直接从 localStorage 读取用户信息
         // ============================================================
         const savedUser = localStorage.getItem('user');
-        let user = null;
-
-        if (savedUser) {
-            try {
-                user = JSON.parse(savedUser);
-                window.__currentUser = user;
-                // 直接渲染用户信息
-                renderUserInfo(user);
-                // 显示管理员按钮
-                if (user.role === 'admin') {
-                    const adminBtn = document.getElementById('adminEntryBtn');
-                    if (adminBtn) adminBtn.style.display = 'inline-block';
-                }
-                console.log('[App] 从 localStorage 恢复用户:', user.username);
-            } catch (e) {
-                console.warn('[App] 解析用户信息失败:', e);
-                localStorage.removeItem('user');
-                user = null;
-            }
-        }
-
-        // ============================================================
-        // 检查登录状态（验证 Cookie 是否有效）
-        // ============================================================
-        const authUser = await checkAuth('/login.html');
-        
-        if (!authUser) {
-            // Cookie 验证失败，但 localStorage 有用户信息
-            if (savedUser) {
-                // 清除本地用户，跳转登录
-                localStorage.removeItem('user');
-                window.location.href = '/login.html';
-                return;
-            }
-            // checkAuth 会自动跳转
+        if (!savedUser) {
+            console.log('[App] 未找到用户信息，跳转登录页');
+            window.location.href = '/login.html';
             return;
         }
 
-        // 用 authUser 更新用户信息（确保最新）
-        user = authUser;
+        let user;
+        try {
+            user = JSON.parse(savedUser);
+        } catch (e) {
+            console.warn('[App] 解析用户信息失败:', e);
+            localStorage.removeItem('user');
+            window.location.href = '/login.html';
+            return;
+        }
+
+        // 保存用户到全局
         window.__currentUser = user;
-        localStorage.setItem('user', JSON.stringify(user));
         renderUserInfo(user);
 
         // 管理员入口控制
@@ -82,41 +54,43 @@ export async function initApp() {
             adminBtn.style.display = user.role === 'admin' ? 'inline-block' : 'none';
         }
 
+        console.log('[App] 用户:', user.username, '角色:', user.role);
+
         // ============================================================
         // 正常初始化流程
         // ============================================================
 
-        // 2. 设置当前月份
+        // 设置当前月份
         const now = new Date();
         const monthEl = document.getElementById('currentMonth');
         if (monthEl) {
             monthEl.textContent = `${now.getFullYear()}年${now.getMonth() + 1}月`;
         }
 
-        // 3. 加载设备列表
+        // 加载设备列表
         await loadDevices(false);
         window.__devices = window.__devices || [];
 
-        // 4. 渲染类型标签
+        // 渲染类型标签
         renderTypeTabs();
 
-        // 5. 渲染设备列表
+        // 渲染设备列表
         renderAll();
 
-        // 6. 加载统计数据
+        // 加载统计数据
         await loadStatistics();
         renderTypeSummary();
         renderRankTable();
 
-        // 7. 更新统计栏
+        // 更新统计栏
         updateStatsBar();
 
-        // 8. 注册设备变更回调（开机/停机后触发统计刷新）
+        // 注册设备变更回调
         onDeviceChangeCallback(() => {
             refreshStatistics();
         });
 
-        // 9. 绑定全局事件
+        // 绑定全局事件
         bindGlobalEvents();
 
         console.log('✅ 应用初始化完成');
@@ -139,7 +113,6 @@ function renderUserInfo(user) {
     }
     if (roleEl) {
         roleEl.textContent = user.role === 'admin' ? '管理员' : '普通用户';
-        // 清除旧样式重新添加
         roleEl.classList.remove('admin');
         if (user.role === 'admin') {
             roleEl.classList.add('admin');
@@ -168,7 +141,7 @@ function updateStatsBar() {
 }
 
 // ================================================================
-// 刷新统计数据（设备变更后调用）
+// 刷新统计数据
 // ================================================================
 
 async function refreshStatistics() {
