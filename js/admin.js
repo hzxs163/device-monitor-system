@@ -7,8 +7,7 @@
 
 import {
     get, post, put, del,
-    showToast, openModal, closeModal,
-    isAdmin, formatTimestamp
+    showToast, isAdmin
 } from './utils.js';
 import { loadDevices, renderAll, renderTypeTabs } from './devices.js';
 import { loadStatistics, renderTypeSummary, renderRankTable } from './statistics.js';
@@ -33,6 +32,12 @@ async function requireAdmin() {
 export async function renderAdminPanel() {
     if (!await requireAdmin()) return;
 
+    // 确保 openModal 存在
+    if (typeof window.openModal !== 'function') {
+        showToast('弹窗功能未初始化，请刷新页面', 'error');
+        return;
+    }
+
     const html = `
         <div class="admin-panel">
             <div class="admin-tabs">
@@ -51,7 +56,7 @@ export async function renderAdminPanel() {
         </div>
     `;
 
-    openModal(html);
+    window.openModal(html);
 
     renderDeviceManagement();
 
@@ -179,7 +184,7 @@ export async function showAddDeviceModal() {
         </div>
     `;
 
-    openModal(html);
+    window.openModal(html);
 
     document.getElementById('addDeviceForm').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -196,7 +201,7 @@ export async function showAddDeviceModal() {
         const result = await post('/devices', { name, tag, type, location });
         if (result.success) {
             showToast('✅ 设备添加成功', 'success');
-            closeModal();
+            window.closeModal();
             await refreshAll();
         } else {
             showToast(result.error || '添加失败', 'error');
@@ -254,7 +259,7 @@ export async function showEditDeviceModal(deviceId) {
         </div>
     `;
 
-    openModal(html);
+    window.openModal(html);
 
     document.getElementById('editDeviceForm').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -266,7 +271,7 @@ export async function showEditDeviceModal(deviceId) {
         const result = await put(`/devices/${deviceId}`, { name, tag, type, location });
         if (result.success) {
             showToast('✅ 设备已更新', 'success');
-            closeModal();
+            window.closeModal();
             await refreshAll();
         } else {
             showToast(result.error || '更新失败', 'error');
@@ -387,7 +392,7 @@ export async function showAddUserModal() {
         </div>
     `;
 
-    openModal(html);
+    window.openModal(html);
 
     document.getElementById('addUserForm').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -408,7 +413,7 @@ export async function showAddUserModal() {
         const result = await post('/users', { username, nickname, password, role });
         if (result.success) {
             showToast('✅ 用户添加成功', 'success');
-            closeModal();
+            window.closeModal();
             renderUserManagement();
         } else {
             showToast(result.error || '添加失败', 'error');
@@ -463,7 +468,7 @@ export async function showEditUserModal(userId) {
         </div>
     `;
 
-    openModal(html);
+    window.openModal(html);
 
     document.getElementById('editUserForm').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -477,7 +482,7 @@ export async function showEditUserModal(userId) {
         const result = await put(`/users/${userId}`, payload);
         if (result.success) {
             showToast('✅ 用户已更新', 'success');
-            closeModal();
+            window.closeModal();
             renderUserManagement();
         } else {
             showToast(result.error || '更新失败', 'error');
@@ -568,7 +573,7 @@ export async function showAddTypeModal() {
         </div>
     `;
 
-    openModal(html);
+    window.openModal(html);
 
     document.getElementById('addTypeForm').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -582,7 +587,7 @@ export async function showAddTypeModal() {
         const result = await post('/types', { name });
         if (result.success) {
             showToast('✅ 类型添加成功', 'success');
-            closeModal();
+            window.closeModal();
             renderTypeManagement();
             await loadDevices(true);
             renderTypeTabs();
@@ -657,5 +662,3 @@ export {
     showAddTypeModal,
     deleteType,
 };
-
-// 删掉 export default，或者只保留不包含 deleteType 的版本
