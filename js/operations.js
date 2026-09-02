@@ -58,7 +58,11 @@ export async function startDevice(deviceId) {
 
         showToast(`✅ ${device?.name || '设备'} 已开机`, 'success');
 
-        // 触发统计更新（由 devices.js 的回调处理）
+        // 触发设备操作事件，刷新操作记录
+        if (typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new Event('deviceOperation'));
+        }
+
         return { success: true };
     } catch (error) {
         console.error('[Operations] 开机失败:', error);
@@ -115,6 +119,11 @@ export async function stopDevice(deviceId) {
             `⏹️ ${device?.name || '设备'} 已停机${durationText ? `，本次运行 ${durationText}` : ''}`,
             'success'
         );
+
+        // 触发设备操作事件，刷新操作记录
+        if (typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new Event('deviceOperation'));
+        }
 
         return { success: true };
     } catch (error) {
