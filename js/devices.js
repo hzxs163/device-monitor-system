@@ -115,7 +115,7 @@ export function filterDevices(keyword) {
 // ================================================================
 
 export function getTotalPages() {
-    return Math.ceil(filteredDevices.length / PAGE_SIZE) || 1;
+    return 1;
 }
 
 export function getCurrentPageDevices() {
