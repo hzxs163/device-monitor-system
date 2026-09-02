@@ -15,6 +15,7 @@ export async function onRequest(context) {
     const user = await getUserFromRequest(context.request, context.env);
     if (user) {
         context.user = user;
+        console.log('[API Middleware] 用户已注入:', user.username);
     }
 
     // 如果路径以 /api/statistics 开头，交给 statistics.js 处理
