@@ -195,6 +195,7 @@
         } from '/js/devices.js';
         import { startDevice, stopDevice } from '/js/operations.js';
         import { loadStatistics, renderTypeSummary, renderRankTable } from '/js/statistics.js';
+        import { formatDuration } from '/js/utils.js';
 
         // ============================================================
         // 全局状态
@@ -309,9 +310,6 @@
         // ============================================================
         // 绑定事件
         // ============================================================
-        // ============================================================
-        // 绑定事件
-        // ============================================================
         function bindEvents() {
             // 退出登录
             logoutBtn.addEventListener('click', () => {
@@ -332,7 +330,6 @@
             // 搜索框清除按钮
             const clearBtn = document.getElementById('clearSearchBtn');
             if (searchInput && clearBtn) {
-                // 输入时显示/隐藏清除按钮
                 searchInput.addEventListener('input', function() {
                     if (this.value.trim().length > 0) {
                         clearBtn.style.display = 'block';
@@ -340,13 +337,10 @@
                         clearBtn.style.display = 'none';
                     }
                 });
-
-                // 点击清除
                 clearBtn.addEventListener('click', function() {
                     searchInput.value = '';
                     searchInput.focus();
                     clearBtn.style.display = 'none';
-                    // 触发搜索（清空后重新加载设备列表）
                     filterDevices('');
                 });
             }
@@ -426,6 +420,217 @@
             div.textContent = text;
             return div.innerHTML;
         }
+
+        // 解析设备参数
+        function parseDeviceParams(device) {
+            if (!device.params) return null;
+            try {
+                return typeof device.params === 'string' ? JSON.parse(device.params) : device.params;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // 格式化参数显示
+        function renderParamsHtml(params) {
+            if (!params) {
+                return `<div class="detail-row" style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:8px 0;">暂无参数</div>`;
+            }
+            const keys = Object.keys(params);
+            if (keys.length === 0) {
+                return `<div class="detail-row" style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:8px 0;">暂无参数</div>`;
+            }
+            return keys.map(key => `
+                <div class="detail-row">
+                    <span class="detail-label">${escapeHtml(key)}</span>
+                    <span class="detail-value">${escapeHtml(params[key])}</span>
+                </div>
+            `).join('');
+        }
+
+        // 编辑参数弹窗
+        window.editDeviceParams = function(deviceId) {
+            const devices = window.__devices || [];
+            const device = devices.find(d => d.id === deviceId);
+            if (!device) {
+                alert('设备不存在');
+                return;
+            }
+
+            const params = parseDeviceParams(device) || {};
+            const keys = Object.keys(params);
+            
+            let formHtml = '';
+            if (keys.length > 0) {
+                formHtml = keys.map(key => `
+                    <div class="form-group">
+                        <label>${escapeHtml(key)}</label>
+                        <input type="text" class="param-input" data-key="${escapeHtml(key)}" value="${escapeHtml(params[key])}" />
+                    </div>
+                `).join('');
+            } else {
+                formHtml = `<div style="text-align:center;color:#94a3b8;padding:16px 0;">暂无参数，请添加</div>`;
+            }
+
+            const html = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>✏️ 编辑参数 - ${escapeHtml(device.name)}</h2>
+                        <button class="modal-close" onclick="window.closeModal()">✕</button>
+                    </div>
+                    <form id="editParamsForm">
+                        <div id="paramsFormBody">
+                            ${formHtml}
+                        </div>
+                        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                            <input type="text" id="newParamKey" placeholder="参数名" style="flex:1;min-width:100px;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;" />
+                            <input type="text" id="newParamValue" placeholder="参数值" style="flex:1;min-width:100px;padding:8px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;" />
+                            <button type="button" class="btn btn-primary" onclick="window.addParamField()" style="padding:8px 16px;white-space:nowrap;">➕ 添加</button>
+                        </div>
+                        <div class="modal-actions" style="margin-top:16px;">
+                            <button type="button" class="btn btn-secondary" onclick="window.closeModal()">取消</button>
+                            <button type="submit" class="btn btn-primary">保存</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+
+            window.openModal(html);
+
+            // 绑定提交事件
+            document.getElementById('editParamsForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const inputs = document.querySelectorAll('.param-input');
+                const updatedParams = {};
+                inputs.forEach(input => {
+                    const key = input.dataset.key;
+                    const value = input.value.trim();
+                    if (key && value) {
+                        updatedParams[key] = value;
+                    }
+                });
+                // 保存参数
+                try {
+                    const res = await fetch(`/api/devices/${deviceId}/params`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ params: updatedParams })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('✅ 参数已更新');
+                        window.closeModal();
+                        // 刷新设备列表
+                        await loadDevices();
+                        renderDevices();
+                    } else {
+                        alert('❌ ' + (result.error || '更新失败'));
+                    }
+                } catch (err) {
+                    alert('❌ 请求失败: ' + err.message);
+                }
+            });
+        };
+
+        // 添加参数字段
+        window.addParamField = function() {
+            const keyInput = document.getElementById('newParamKey');
+            const valueInput = document.getElementById('newParamValue');
+            const key = keyInput.value.trim();
+            const value = valueInput.value.trim();
+            if (!key) {
+                alert('请输入参数名');
+                return;
+            }
+            if (!value) {
+                alert('请输入参数值');
+                return;
+            }
+            // 检查是否已存在
+            const existing = document.querySelector(`.param-input[data-key="${escapeHtml(key)}"]`);
+            if (existing) {
+                alert('参数名已存在');
+                return;
+            }
+            const body = document.getElementById('paramsFormBody');
+            const row = document.createElement('div');
+            row.className = 'form-group';
+            row.innerHTML = `
+                <label>${escapeHtml(key)}</label>
+                <input type="text" class="param-input" data-key="${escapeHtml(key)}" value="${escapeHtml(value)}" />
+            `;
+            body.appendChild(row);
+            keyInput.value = '';
+            valueInput.value = '';
+            keyInput.focus();
+        };
+
+        // 显示设备详情弹窗
+        window.showDeviceDetail = function(deviceId) {
+            const devices = window.__devices || [];
+            const device = devices.find(d => d.id === deviceId);
+            if (!device) {
+                alert('设备不存在');
+                return;
+            }
+
+            const isRunning = device.status === 1;
+            const statusText = isRunning ? '🟢 运行中' : '⚪ 已停机';
+            const monthlyHours = device.monthly_hours || 0;
+            const monthlyText = monthlyHours > 0 ? `${monthlyHours}小时` : '0小时';
+            const currentDuration = isRunning && device.current_start_time
+                ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
+                : '--';
+
+            const params = parseDeviceParams(device);
+            const paramsHtml = renderParamsHtml(params);
+            const isAdmin = window.__currentUser?.role === 'admin';
+
+            const html = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>📋 ${escapeHtml(device.name)}</h2>
+                        <button class="modal-close" onclick="window.closeModal()">✕</button>
+                    </div>
+                    <div class="device-detail-grid">
+                        <div class="detail-row">
+                            <span class="detail-label">位　　号</span>
+                            <span class="detail-value">${escapeHtml(device.tag || '-')}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">设备类型</span>
+                            <span class="detail-value">${escapeHtml(device.type || '未分类')}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">位　　置</span>
+                            <span class="detail-value">${escapeHtml(device.location || '未设置')}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">当前状态</span>
+                            <span class="detail-value ${isRunning ? 'running' : 'stopped'}">${statusText}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">本月运行</span>
+                            <span class="detail-value">${monthlyText}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">本次运行</span>
+                            <span class="detail-value">${currentDuration}</span>
+                        </div>
+                        <div class="detail-row" style="grid-column:1/-1;border-top:2px solid #eef2f7;padding-top:12px;margin-top:4px;">
+                            <span style="font-weight:600;color:#1e293b;">📐 设备参数</span>
+                        </div>
+                        ${paramsHtml}
+                    </div>
+                    <div class="modal-actions" style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+                        ${isAdmin ? `<button class="btn btn-primary" onclick="window.editDeviceParams(${device.id})">✏️ 编辑参数</button>` : ''}
+                        <button class="btn btn-secondary" onclick="window.closeModal()">关 闭</button>
+                    </div>
+                </div>
+            `;
+
+            window.openModal(html);
+        };
 
         async function loadDeviceTypes() {
             try {
