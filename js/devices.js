@@ -126,32 +126,7 @@ export function getTotalPages() {
 }
 
 export function getCurrentPageDevices() {
-    // 直接从 window.__devices 获取，确保数据最新
-    const devices = window.__devices || [];
-    let list = [...devices];
-    
-    // 按类型筛选
-    if (currentType !== 'all') {
-        list = list.filter(d => d.type === currentType);
-    }
-    
-    // 按搜索关键词筛选
-    if (searchKeyword.trim()) {
-        const keyword = searchKeyword.trim().toLowerCase();
-        list = list.filter(d =>
-            d.name.toLowerCase().includes(keyword) ||
-            (d.tag && d.tag.toLowerCase().includes(keyword))
-        );
-    }
-    
-    // 按状态排序（运行中排前面）
-    list.sort((a, b) => {
-        if (a.status === 1 && b.status !== 1) return -1;
-        if (a.status !== 1 && b.status === 1) return 1;
-        return a.name.localeCompare(b.name);
-    });
-    
-    return list;
+    return filteredDevices;
 }
 
 export function goToPage(page) {
@@ -253,7 +228,7 @@ export function renderDevices() {
                 : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
 
             html += `
-                <div class="device-card ${statusClass}" data-id="${device.id}" style="cursor:pointer;">
+                <div class="device-card ${statusClass}" data-id="${device.id}" onclick="window.showDeviceDetail(${device.id})" style="cursor:pointer;">
                     <div class="card-row">
                         <span class="device-name">${escapeHtml(device.name)}</span>
                         <span class="device-status">
@@ -289,9 +264,9 @@ export function renderDevices() {
 
     grid.innerHTML = html;
 
-    // 绑定卡片双击事件（排除按钮点击）
+    // 绑定卡片点击事件（排除按钮点击）
     grid.querySelectorAll('.device-card').forEach(card => {
-        card.addEventListener('dblclick', function(e) {
+        card.addEventListener('click', function(e) {
             if (e.target.closest('.btn-start') || e.target.closest('.btn-stop')) {
                 return;
             }
