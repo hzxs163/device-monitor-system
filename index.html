@@ -574,7 +574,13 @@
                     if (result.success) {
                         alert('✅ 设备添加成功');
                         window.closeModal();
-                        window.location.reload();
+                        // 重新加载设备列表，刷新管理面板
+                        await loadDevices();
+                        renderDeviceManagement();
+                        // 同时刷新首页卡片
+                        if (typeof window.reloadDevices === 'function') {
+                            window.reloadDevices();
+                        }
                     } else {
                         alert('❌ ' + (result.error || '添加失败'));
                     }
@@ -652,7 +658,13 @@
                     if (result.success) {
                         alert('✅ 设备已更新');
                         window.closeModal();
-                        window.location.reload();
+                        // 重新加载设备列表，刷新管理面板
+                        await loadDevices();
+                        renderDeviceManagement();
+                        // 同时刷新首页卡片
+                        if (typeof window.reloadDevices === 'function') {
+                            window.reloadDevices();
+                        }
                     } else {
                         alert('❌ ' + (result.error || '更新失败'));
                     }
@@ -670,7 +682,13 @@
                 const result = await res.json();
                 if (result.success) {
                     alert('✅ 设备已删除');
-                    window.location.reload();
+                    // 重新加载设备列表，刷新管理面板
+                    await loadDevices();
+                    renderDeviceManagement();
+                    // 同时刷新首页卡片
+                    if (typeof window.reloadDevices === 'function') {
+                        window.reloadDevices();
+                    }
                 } else {
                     alert('❌ ' + (result.error || '删除失败'));
                 }
@@ -715,7 +733,14 @@
                     if (result.success) {
                         alert('✅ 类型添加成功');
                         window.closeModal();
-                        window.location.reload();
+                        // 重新加载类型管理
+                        await renderTypeManagementInline();
+                        // 刷新首页类型标签和设备列表
+                        await loadDevices();
+                        renderTypeTabs();
+                        if (typeof window.reloadDevices === 'function') {
+                            window.reloadDevices();
+                        }
                     } else {
                         alert('❌ ' + (result.error || '添加失败'));
                     }
@@ -733,7 +758,12 @@
                 const result = await res.json();
                 if (result.success) {
                     alert('✅ 类型已删除');
-                    window.location.reload();
+                    await renderTypeManagementInline();
+                    await loadDevices();
+                    renderTypeTabs();
+                    if (typeof window.reloadDevices === 'function') {
+                        window.reloadDevices();
+                    }
                 } else {
                     alert('❌ ' + (result.error || '删除失败'));
                 }
