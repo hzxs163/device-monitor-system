@@ -189,7 +189,7 @@ export function renderDevices() {
                     <span class="device-type">${escapeHtml(device.type || '未分类')}</span>
                 </div>
                 <div class="card-row">
-                    <span class="device-duration" style="display:flex;justify-content:space-between;font-size:var(--text-sm);">
+                    <span class="device-duration" style="display:flex;justify-content:space-between;font-size:var(--text-sm);gap:12px;">
                         <span>本月运行: ${monthlyText}</span>
                         <span>本次运行: ${currentDuration}</span>
                     </span>
