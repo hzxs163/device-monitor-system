@@ -28,16 +28,63 @@ window.__currentUser = null;
  */
 export async function initApp() {
     try {
-        // 1. 检查登录状态
-        const user = await checkAuth('/login.html');
-        if (!user) {
+        // ============================================================
+        // 新增：先从 localStorage 恢复用户信息
+        // ============================================================
+        const savedUser = localStorage.getItem('user');
+        let user = null;
+
+        if (savedUser) {
+            try {
+                user = JSON.parse(savedUser);
+                window.__currentUser = user;
+                // 直接渲染用户信息
+                renderUserInfo(user);
+                // 显示管理员按钮
+                if (user.role === 'admin') {
+                    const adminBtn = document.getElementById('adminEntryBtn');
+                    if (adminBtn) adminBtn.style.display = 'inline-block';
+                }
+                console.log('[App] 从 localStorage 恢复用户:', user.username);
+            } catch (e) {
+                console.warn('[App] 解析用户信息失败:', e);
+                localStorage.removeItem('user');
+                user = null;
+            }
+        }
+
+        // ============================================================
+        // 检查登录状态（验证 Cookie 是否有效）
+        // ============================================================
+        const authUser = await checkAuth('/login.html');
+        
+        if (!authUser) {
+            // Cookie 验证失败，但 localStorage 有用户信息
+            if (savedUser) {
+                // 清除本地用户，跳转登录
+                localStorage.removeItem('user');
+                window.location.href = '/login.html';
+                return;
+            }
             // checkAuth 会自动跳转
             return;
         }
 
-        // 保存当前用户到全局
+        // 用 authUser 更新用户信息（确保最新）
+        user = authUser;
         window.__currentUser = user;
+        localStorage.setItem('user', JSON.stringify(user));
         renderUserInfo(user);
+
+        // 管理员入口控制
+        const adminBtn = document.getElementById('adminEntryBtn');
+        if (adminBtn) {
+            adminBtn.style.display = user.role === 'admin' ? 'inline-block' : 'none';
+        }
+
+        // ============================================================
+        // 正常初始化流程
+        // ============================================================
 
         // 2. 设置当前月份
         const now = new Date();
@@ -69,17 +116,7 @@ export async function initApp() {
             refreshStatistics();
         });
 
-        // 9. 管理员入口控制
-        const adminBtn = document.getElementById('adminEntryBtn');
-        if (adminBtn) {
-            if (user.role === 'admin') {
-                adminBtn.style.display = 'inline-block';
-            } else {
-                adminBtn.style.display = 'none';
-            }
-        }
-
-        // 10. 绑定全局事件
+        // 9. 绑定全局事件
         bindGlobalEvents();
 
         console.log('✅ 应用初始化完成');
@@ -102,6 +139,8 @@ function renderUserInfo(user) {
     }
     if (roleEl) {
         roleEl.textContent = user.role === 'admin' ? '管理员' : '普通用户';
+        // 清除旧样式重新添加
+        roleEl.classList.remove('admin');
         if (user.role === 'admin') {
             roleEl.classList.add('admin');
         }
@@ -152,6 +191,7 @@ function bindGlobalEvents() {
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
+            localStorage.removeItem('user');
             await logout();
             window.location.href = '/login.html';
         });
@@ -170,8 +210,12 @@ function bindGlobalEvents() {
     const exportBtn = document.getElementById('exportBtn');
     if (exportBtn) {
         exportBtn.addEventListener('click', () => {
-            const { exportReport } = require('./statistics.js');
-            exportReport();
+            import('./statistics.js').then(module => {
+                module.exportReport();
+            }).catch(err => {
+                console.error('[App] 导出失败:', err);
+                showToast('导出功能加载失败', 'error');
+            });
         });
     }
 
@@ -182,8 +226,11 @@ function bindGlobalEvents() {
         searchInput.addEventListener('input', () => {
             clearTimeout(timer);
             timer = setTimeout(() => {
-                const { filterDevices } = require('./devices.js');
-                filterDevices(searchInput.value);
+                import('./devices.js').then(module => {
+                    module.filterDevices(searchInput.value);
+                }).catch(err => {
+                    console.error('[App] 搜索失败:', err);
+                });
             }, 300);
         });
     }
