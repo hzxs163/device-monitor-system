@@ -37,6 +37,7 @@ export async function onRequestGet({ request, env }) {
     try {
         const startTime = Math.floor(new Date(year, month - 1, 1).getTime() / 1000);
         const endTime = Math.floor(new Date(year, month, 0, 23, 59, 59).getTime() / 1000);
+        const now = Math.floor(Date.now() / 1000);
 
         // 查询所有设备
         const deviceStmt = env.DB.prepare(`
@@ -58,13 +59,16 @@ export async function onRequestGet({ request, env }) {
             });
         }
 
-        // 查询当月运行记录
+        // 查询当月所有运行记录（包括正在运行的）
         const recordStmt = env.DB.prepare(`
-            SELECT device_id, start_time, end_time, duration_seconds
+            SELECT
+                device_id,
+                start_time,
+                end_time,
+                duration_seconds
             FROM run_records
             WHERE start_time <= ?
               AND (end_time >= ? OR end_time IS NULL)
-              AND duration_seconds IS NOT NULL
         `);
         const records = await recordStmt.bind(endTime, startTime).all();
 
@@ -82,13 +86,20 @@ export async function onRequestGet({ request, env }) {
             };
         });
 
+        // 关键修复：对每条记录计算实际运行时长
         records.results.forEach(r => {
             const deviceId = r.device_id;
             if (!deviceId || !deviceHours.hasOwnProperty(deviceId)) return;
 
             let start = r.start_time;
-            let end = r.end_time || endTime;
+            let end = r.end_time;
 
+            // 如果还在运行中，用当前时间
+            if (end === null) {
+                end = Math.min(now, endTime);
+            }
+
+            // 截取当月部分
             if (start < startTime) start = startTime;
             if (end > endTime) end = endTime;
 
