@@ -1,11 +1,37 @@
 /**
  * ================================================================
  * 设备运行监控系统 - 导出 Excel 模块
- * 功能：导出设备运行月报（.xlsx 格式）
+ * 功能：导出设备运行月报（使用 CDN 加载 xlsx）
  * ================================================================
  */
 
-import * as XLSX from 'xlsx';
+// 使用 CDN 加载 xlsx 库
+const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+
+let XLSX = null;
+
+/**
+ * 加载 xlsx 库
+ */
+async function loadXLSX() {
+    if (XLSX) return XLSX;
+    try {
+        // 动态导入 CDN 脚本
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = XLSX_URL;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+        // 获取全局 XLSX 对象
+        XLSX = window.XLSX;
+        return XLSX;
+    } catch (err) {
+        console.error('加载 xlsx 库失败:', err);
+        throw new Error('加载 Excel 导出库失败，请检查网络');
+    }
+}
 
 /**
  * 导出设备运行月报
@@ -13,15 +39,20 @@ import * as XLSX from 'xlsx';
  * @param {number} year - 年份
  * @param {number} month - 月份
  */
-export function exportMonthlyReport(devices, year, month) {
+export async function exportMonthlyReport(devices, year, month) {
     if (!devices || devices.length === 0) {
         alert('没有数据可导出');
         return;
     }
 
+    // 加载 xlsx 库
+    const XLSXLib = await loadXLSX();
+    if (!XLSXLib) {
+        alert('加载 Excel 导出库失败，请刷新页面重试');
+        return;
+    }
+
     const monthLabel = `${year}年${month}月`;
-    const now = new Date();
-    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
     // ============================================================
     // Sheet 1: 本月运行统计
@@ -41,7 +72,7 @@ export function exportMonthlyReport(devices, year, month) {
         }))
         .sort((a, b) => b['本月运行(小时)'] - a['本月运行(小时)']);
 
-    const ws1 = XLSX.utils.json_to_sheet(rankingData);
+    const ws1 = XLSXLib.utils.json_to_sheet(rankingData);
     ws1['!cols'] = [
         { wch: 6 },   // 排名
         { wch: 16 },  // 设备名称
@@ -77,7 +108,7 @@ export function exportMonthlyReport(devices, year, month) {
         '已停机(台)': typeMap[type].stopped,
     })).sort((a, b) => b['本月总运行(小时)'] - a['本月总运行(小时)']);
 
-    const ws2 = XLSX.utils.json_to_sheet(summaryData);
+    const ws2 = XLSXLib.utils.json_to_sheet(summaryData);
     ws2['!cols'] = [
         { wch: 14 },  // 设备类型
         { wch: 10 },  // 设备数量
@@ -106,7 +137,7 @@ export function exportMonthlyReport(devices, year, month) {
         };
     });
 
-    const ws3 = XLSX.utils.json_to_sheet(detailData);
+    const ws3 = XLSXLib.utils.json_to_sheet(detailData);
     ws3['!cols'] = [
         { wch: 16 },  // 设备名称
         { wch: 12 },  // 位号
@@ -121,16 +152,16 @@ export function exportMonthlyReport(devices, year, month) {
     // ============================================================
     // 创建工作簿
     // ============================================================
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws1, '本月运行统计');
-    XLSX.utils.book_append_sheet(wb, ws2, '按类型汇总');
-    XLSX.utils.book_append_sheet(wb, ws3, '设备明细');
+    const wb = XLSXLib.utils.book_new();
+    XLSXLib.utils.book_append_sheet(wb, ws1, '本月运行统计');
+    XLSXLib.utils.book_append_sheet(wb, ws2, '按类型汇总');
+    XLSXLib.utils.book_append_sheet(wb, ws3, '设备明细');
 
     // ============================================================
     // 导出文件
     // ============================================================
     const fileName = `设备运行月报_${monthLabel}.xlsx`;
-    XLSX.writeFile(wb, fileName);
+    XLSXLib.writeFile(wb, fileName);
 
     alert(`✅ 报表已导出：${fileName}`);
 }
@@ -139,9 +170,6 @@ export function exportMonthlyReport(devices, year, month) {
 // 辅助函数
 // ============================================================
 
-/**
- * 格式化时长（秒 → 可读字符串）
- */
 function formatDuration(seconds) {
     if (!seconds || seconds < 0) return '0秒';
     const hours = Math.floor(seconds / 3600);
@@ -154,9 +182,6 @@ function formatDuration(seconds) {
     return parts.join('') || '0秒';
 }
 
-/**
- * 解析设备参数
- */
 function parseParams(params) {
     if (!params) return null;
     try {
