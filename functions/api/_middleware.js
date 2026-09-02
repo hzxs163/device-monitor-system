@@ -1,11 +1,21 @@
 // functions/api/_middleware.js
 // 这个文件会拦截所有 /api/* 请求，然后手动分发
 
+import { getUserFromRequest } from '../utils/jwt.js';
+
 export async function onRequest(context) {
     const url = new URL(context.request.url);
     const path = url.pathname;
 
     console.log('[API Middleware] 请求路径:', path);
+
+    // ============================================================
+    // 从请求中获取用户信息（JWT），注入到 context
+    // ============================================================
+    const user = await getUserFromRequest(context.request, context.env);
+    if (user) {
+        context.user = user;
+    }
 
     // 如果路径以 /api/statistics 开头，交给 statistics.js 处理
     if (path.startsWith('/api/statistics')) {
