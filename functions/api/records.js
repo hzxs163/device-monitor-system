@@ -66,7 +66,7 @@ async function handleStart(request, env, user) {
             INSERT INTO run_records (device_id, start_time, operator_id)
             VALUES (?, ?, ?)
         `);
-        await insertStmt.bind(deviceId, now, 'system').run();
+        await insertStmt.bind(deviceId, now, user?.id || 'system').run();
 
         const updateStmt = env.DB.prepare(`
             UPDATE devices SET status = 1, current_start_time = ? WHERE id = ?
@@ -91,9 +91,9 @@ async function handleStart(request, env, user) {
                     'start',
                     null
                 ).run();
+                console.log('[Records] 普通用户开机日志已记录:', user.username);
             } catch (logErr) {
-                console.error('[Records] 记录操作日志失败:', logErr);
-                // 不影响主流程
+                console.error('[Records] 记录开机日志失败:', logErr);
             }
         }
 
@@ -181,9 +181,9 @@ async function handleStop(request, env, user) {
                     'stop',
                     duration
                 ).run();
+                console.log('[Records] 普通用户停机日志已记录:', user.username);
             } catch (logErr) {
-                console.error('[Records] 记录操作日志失败:', logErr);
-                // 不影响主流程
+                console.error('[Records] 记录停机日志失败:', logErr);
             }
         }
 
@@ -200,7 +200,7 @@ async function handleStop(request, env, user) {
 }
 
 // ================================================================
-// 路由入口 - 使用 includes 匹配，最宽松
+// 路由入口
 // ================================================================
 export async function onRequest(context) {
     const { request, env, user } = context;
@@ -210,16 +210,13 @@ export async function onRequest(context) {
 
     console.log('[Records] 请求路径:', path, '方法:', method);
 
-    // 只要路径包含 /api/records/ 就处理
     if (path.includes('/api/records/')) {
-        // 开机
         if (path.includes('/start')) {
             if (method === 'POST') {
                 return handleStart(request, env, user);
             }
             return error('方法不允许', 405);
         }
-        // 停机
         if (path.includes('/stop')) {
             if (method === 'POST') {
                 return handleStop(request, env, user);
