@@ -152,27 +152,32 @@ async function handleStop(request, env) {
 }
 
 // ================================================================
-// 路由入口
+// 路由入口 - 使用 includes 匹配，最宽松
 // ================================================================
 export async function onRequest(context) {
     const { request, env } = context;
     const url = new URL(request.url);
     const method = request.method;
+    const path = url.pathname;
 
-    console.log('[Records] 请求:', url.pathname, method);
+    console.log('[Records] 请求路径:', path, '方法:', method);
 
-    if (url.pathname === '/api/records/start') {
-        if (method === 'POST') {
-            return handleStart(request, env);
+    // 只要路径包含 /api/records/ 就处理
+    if (path.includes('/api/records/')) {
+        // 开机
+        if (path.includes('/start')) {
+            if (method === 'POST') {
+                return handleStart(request, env);
+            }
+            return error('方法不允许', 405);
         }
-        return error('方法不允许', 405);
-    }
-
-    if (url.pathname === '/api/records/stop') {
-        if (method === 'POST') {
-            return handleStop(request, env);
+        // 停机
+        if (path.includes('/stop')) {
+            if (method === 'POST') {
+                return handleStop(request, env);
+            }
+            return error('方法不允许', 405);
         }
-        return error('方法不允许', 405);
     }
 
     return error('接口不存在', 404);
