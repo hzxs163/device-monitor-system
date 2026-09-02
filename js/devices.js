@@ -39,12 +39,14 @@ export async function loadDevices(silent = false) {
             allDevices = [];
             filteredDevices = [];
             window.__devices = [];
+            window.__allTypes = [];
             return [];
         }
 
         allDevices = result.data?.devices || [];
         typeList = result.data?.types || [];
         window.__devices = allDevices;
+        window.__allTypes = typeList;  // 保存类型列表到全局
         applyFilters();
         return allDevices;
     } catch (error) {
@@ -55,6 +57,7 @@ export async function loadDevices(silent = false) {
         allDevices = [];
         filteredDevices = [];
         window.__devices = [];
+        window.__allTypes = [];
         return [];
     }
 }
@@ -167,7 +170,24 @@ export function renderDevices() {
         grouped[type].push(device);
     });
 
-    const sortedTypes = Object.keys(grouped).sort();
+    // ============================================================
+    // 按 sort_order 排序
+    // ============================================================
+    let sortedTypes = [];
+    
+    if (window.__allTypes && window.__allTypes.length > 0) {
+        const typeOrderMap = {};
+        window.__allTypes.forEach((t, index) => {
+            typeOrderMap[t.name] = t.sort_order !== undefined ? t.sort_order : index;
+        });
+        sortedTypes = Object.keys(grouped).sort((a, b) => {
+            const orderA = typeOrderMap[a] !== undefined ? typeOrderMap[a] : 999;
+            const orderB = typeOrderMap[b] !== undefined ? typeOrderMap[b] : 999;
+            return orderA - orderB;
+        });
+    } else {
+        sortedTypes = Object.keys(grouped).sort();
+    }
 
     let html = '';
 
