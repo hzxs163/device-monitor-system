@@ -26,6 +26,13 @@ let currentMonth = new Date().getMonth() + 1;
 // 1. 加载统计数据
 // ================================================================
 
+/**
+ * 从服务器加载统计数据
+ * @param {number} year - 年份
+ * @param {number} month - 月份 (1-12)
+ * @param {boolean} silent - 是否静默加载
+ * @returns {Promise<object>}
+ */
 export async function loadStatistics(year, month, silent = false) {
     year = year || currentYear;
     month = month || currentMonth;
