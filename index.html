@@ -358,13 +358,20 @@
             });
 
             // 导出 Excel
-            exportBtn.addEventListener('click', () => {
-                import('/js/statistics.js').then(module => {
-                    module.exportReport();
-                }).catch(err => {
-                    console.error('[Index] 导出失败:', err);
+            // 导出 Excel（顶部统计栏按钮）
+            const exportExcelBtn = document.getElementById('exportExcelBtn');
+            if (exportExcelBtn) {
+                exportExcelBtn.addEventListener('click', function() {
+                    import('/js/export.js').then(module => {
+                        const devices = window.__devices || [];
+                        const now = new Date();
+                        module.exportMonthlyReport(devices, now.getFullYear(), now.getMonth() + 1);
+                    }).catch(err => {
+                        console.error('[Index] 导出失败:', err);
+                        alert('导出功能加载失败，请重试');
+                    });
                 });
-            });
+            }
 
             // 点击模态框外部关闭
             modalOverlay.addEventListener('click', (e) => {
