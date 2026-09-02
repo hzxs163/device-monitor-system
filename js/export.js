@@ -1,0 +1,167 @@
+/**
+ * ================================================================
+ * 设备运行监控系统 - 导出 Excel 模块
+ * 功能：导出设备运行月报（.xlsx 格式）
+ * ================================================================
+ */
+
+import * as XLSX from 'xlsx';
+
+/**
+ * 导出设备运行月报
+ * @param {Array} devices - 设备列表（含 monthly_hours）
+ * @param {number} year - 年份
+ * @param {number} month - 月份
+ */
+export function exportMonthlyReport(devices, year, month) {
+    if (!devices || devices.length === 0) {
+        alert('没有数据可导出');
+        return;
+    }
+
+    const monthLabel = `${year}年${month}月`;
+    const now = new Date();
+    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+    // ============================================================
+    // Sheet 1: 本月运行统计
+    // ============================================================
+    const rankingData = devices
+        .filter(d => !d.is_deleted)
+        .map((d, index) => ({
+            '排名': index + 1,
+            '设备名称': d.name,
+            '位号': d.tag || '-',
+            '设备类型': d.type || '未分类',
+            '本月运行(小时)': d.monthly_hours || 0,
+            '当前状态': d.status === 1 ? '运行中' : '已停机',
+            '本次运行': d.status === 1 && d.current_start_time
+                ? formatDuration(Math.floor(Date.now() / 1000) - d.current_start_time)
+                : '--'
+        }))
+        .sort((a, b) => b['本月运行(小时)'] - a['本月运行(小时)']);
+
+    const ws1 = XLSX.utils.json_to_sheet(rankingData);
+    ws1['!cols'] = [
+        { wch: 6 },   // 排名
+        { wch: 16 },  // 设备名称
+        { wch: 12 },  // 位号
+        { wch: 12 },  // 设备类型
+        { wch: 16 },  // 本月运行
+        { wch: 10 },  // 当前状态
+        { wch: 14 },  // 本次运行
+    ];
+
+    // ============================================================
+    // Sheet 2: 按类型汇总
+    // ============================================================
+    const typeMap = {};
+    devices.filter(d => !d.is_deleted).forEach(d => {
+        const type = d.type || '未分类';
+        if (!typeMap[type]) {
+            typeMap[type] = { total: 0, running: 0, stopped: 0 };
+        }
+        typeMap[type].total += d.monthly_hours || 0;
+        if (d.status === 1) {
+            typeMap[type].running += 1;
+        } else {
+            typeMap[type].stopped += 1;
+        }
+    });
+
+    const summaryData = Object.keys(typeMap).map(type => ({
+        '设备类型': type,
+        '设备数量': devices.filter(d => !d.is_deleted && (d.type || '未分类') === type).length,
+        '本月总运行(小时)': typeMap[type].total,
+        '运行中(台)': typeMap[type].running,
+        '已停机(台)': typeMap[type].stopped,
+    })).sort((a, b) => b['本月总运行(小时)'] - a['本月总运行(小时)']);
+
+    const ws2 = XLSX.utils.json_to_sheet(summaryData);
+    ws2['!cols'] = [
+        { wch: 14 },  // 设备类型
+        { wch: 10 },  // 设备数量
+        { wch: 18 },  // 本月总运行
+        { wch: 12 },  // 运行中
+        { wch: 12 },  // 已停机
+    ];
+
+    // ============================================================
+    // Sheet 3: 设备明细
+    // ============================================================
+    const detailData = devices.filter(d => !d.is_deleted).map(d => {
+        const params = parseParams(d.params);
+        const paramStr = params ? Object.keys(params).map(k => `${k}:${params[k]}`).join('; ') : '';
+        return {
+            '设备名称': d.name,
+            '位号': d.tag || '-',
+            '设备类型': d.type || '未分类',
+            '位置': d.location || '-',
+            '当前状态': d.status === 1 ? '运行中' : '已停机',
+            '本月运行': `${d.monthly_hours || 0}小时`,
+            '本次运行': d.status === 1 && d.current_start_time
+                ? formatDuration(Math.floor(Date.now() / 1000) - d.current_start_time)
+                : '--',
+            '设备参数': paramStr || '-',
+        };
+    });
+
+    const ws3 = XLSX.utils.json_to_sheet(detailData);
+    ws3['!cols'] = [
+        { wch: 16 },  // 设备名称
+        { wch: 12 },  // 位号
+        { wch: 12 },  // 设备类型
+        { wch: 10 },  // 位置
+        { wch: 10 },  // 当前状态
+        { wch: 12 },  // 本月运行
+        { wch: 14 },  // 本次运行
+        { wch: 30 },  // 设备参数
+    ];
+
+    // ============================================================
+    // 创建工作簿
+    // ============================================================
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, '本月运行统计');
+    XLSX.utils.book_append_sheet(wb, ws2, '按类型汇总');
+    XLSX.utils.book_append_sheet(wb, ws3, '设备明细');
+
+    // ============================================================
+    // 导出文件
+    // ============================================================
+    const fileName = `设备运行月报_${monthLabel}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    alert(`✅ 报表已导出：${fileName}`);
+}
+
+// ============================================================
+// 辅助函数
+// ============================================================
+
+/**
+ * 格式化时长（秒 → 可读字符串）
+ */
+function formatDuration(seconds) {
+    if (!seconds || seconds < 0) return '0秒';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}小时`);
+    if (minutes > 0) parts.push(`${minutes}分`);
+    if (secs > 0 && hours === 0) parts.push(`${secs}秒`);
+    return parts.join('') || '0秒';
+}
+
+/**
+ * 解析设备参数
+ */
+function parseParams(params) {
+    if (!params) return null;
+    try {
+        return typeof params === 'string' ? JSON.parse(params) : params;
+    } catch (e) {
+        return null;
+    }
+}
