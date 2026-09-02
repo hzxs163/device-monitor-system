@@ -114,7 +114,17 @@ export async function onRequestPost({ request, env }) {
 // ================================================================
 
 export async function onRequestPut({ request, env, params }) {
-    const deviceId = parseInt(params.id);
+    // 从 params 获取 deviceId
+    let deviceId = parseInt(params?.id);
+    
+    // 如果 params.id 取不到，从 URL 路径中解析
+    if (!deviceId || isNaN(deviceId)) {
+        const url = new URL(request.url);
+        const pathParts = url.pathname.split('/');
+        const lastPart = pathParts[pathParts.length - 1];
+        deviceId = parseInt(lastPart);
+    }
+
     if (!deviceId || isNaN(deviceId)) {
         return error('无效的设备 ID', 400);
     }
@@ -172,10 +182,9 @@ export async function onRequestPut({ request, env, params }) {
         return success({ id: deviceId }, '设备更新成功');
     } catch (err) {
         console.error('[Devices] 更新失败:', err);
-        return error('更新设备失败', 500);
+        return error('更新设备失败: ' + err.message, 500);
     }
 }
-
 // ================================================================
 // 4. DELETE /api/devices/:id - 删除设备（软删除）
 // ================================================================
