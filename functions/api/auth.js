@@ -55,33 +55,20 @@ async function handleLogin(request, env) {
         return error('账号已被禁用', 403);
     }
 
-    // 验证密码
-    let isValid = false;
-    try {
-        isValid = await verifyPassword(password, user.password_hash, user.password_salt);
-    } catch (err) {
-        return error('密码验证失败: ' + err.message, 500);
-    }
-
+    const isValid = await verifyPassword(password, user.password_hash, user.password_salt);
     if (!isValid) {
         return error('用户名或密码错误', 401);
     }
 
-    // 签发 JWT
-    let token;
-    try {
-        token = await signJWT(
-            {
-                id: user.id,
-                username: user.username,
-                nickname: user.nickname || user.username,
-                role: user.role || 'user',
-            },
-            env
-        );
-    } catch (err) {
-        return error('签发 JWT 失败: ' + err.message, 500);
-    }
+    const token = await signJWT(
+        {
+            id: user.id,
+            username: user.username,
+            nickname: user.nickname || user.username,
+            role: user.role || 'user',
+        },
+        env
+    );
 
     const userData = {
         id: user.id,
@@ -90,7 +77,8 @@ async function handleLogin(request, env) {
         role: user.role || 'user',
     };
 
-    const cookie = `token=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${60 * 60 * 24 * 7}`;
+    // 去掉 Secure 属性
+    const cookie = `token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${60 * 60 * 24 * 7}`;
 
     return new Response(
         JSON.stringify({
