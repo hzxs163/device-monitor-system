@@ -207,6 +207,7 @@ export async function onRequest(context) {
     const { request } = context;
     const url = new URL(request.url);
     const method = request.method;
+    console.log('[Records] 收到请求路径:', url.pathname); 
 
     // 路由匹配: /api/records/status/:id
     if (url.pathname.match(/^\/api\/records\/status\/\d+$/)) {
