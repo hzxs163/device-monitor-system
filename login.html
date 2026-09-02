@@ -85,21 +85,6 @@
         const errorDiv = document.getElementById('loginError');
 
         // ============================================================
-        // 检查是否已登录（已登录则跳转首页）
-        // ============================================================
-        (async function checkAlreadyLoggedIn() {
-            try {
-                const { getCurrentUser } = await import('/js/auth.js');
-                const user = await getCurrentUser();
-                if (user) {
-                    window.location.href = '/index.html';
-                }
-            } catch (_) {
-                // 未登录，继续显示登录页
-            }
-        })();
-
-        // ============================================================
         // 登录表单提交
         // ============================================================
         form.addEventListener('submit', async (e) => {
@@ -108,19 +93,16 @@
             const username = usernameInput.value.trim();
             const password = passwordInput.value;
 
-            // 基础校验
             if (!username || !password) {
                 showError('请输入用户名和密码');
                 return;
             }
 
-            // 用户名格式校验（仅允许字母、数字、下划线）
             if (!/^[a-zA-Z0-9_]+$/.test(username)) {
                 showError('用户名仅限字母、数字、下划线');
                 return;
             }
 
-            // 禁用按钮，防止重复提交
             loginBtn.disabled = true;
             loginBtn.textContent = '登录中...';
             hideError();
@@ -129,7 +111,6 @@
                 const result = await login(username, password);
 
                 if (result.success) {
-                    // 登录成功，跳转首页
                     window.location.href = '/index.html';
                 } else {
                     showError(result.message || '登录失败，请检查用户名或密码');
@@ -143,9 +124,6 @@
             }
         });
 
-        // ============================================================
-        // 错误提示控制
-        // ============================================================
         function showError(message) {
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
@@ -155,9 +133,6 @@
             errorDiv.style.display = 'none';
         }
 
-        // ============================================================
-        // 回车键触发登录
-        // ============================================================
         passwordInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 form.dispatchEvent(new Event('submit'));
@@ -170,9 +145,6 @@
             }
         });
 
-        // ============================================================
-        // 输入时自动隐藏错误
-        // ============================================================
         usernameInput.addEventListener('input', hideError);
         passwordInput.addEventListener('input', hideError);
 
