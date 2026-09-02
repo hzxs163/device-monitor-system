@@ -559,7 +559,7 @@
                     if (result.success) {
                         alert('✅ 设备添加成功');
                         window.closeModal();
-                        location.reload();
+                        window.location.reload();
                     } else {
                         alert('❌ ' + (result.error || '添加失败'));
                     }
@@ -637,7 +637,7 @@
                     if (result.success) {
                         alert('✅ 设备已更新');
                         window.closeModal();
-                        location.reload();
+                        window.location.reload();
                     } else {
                         alert('❌ ' + (result.error || '更新失败'));
                     }
@@ -655,7 +655,7 @@
                 const result = await res.json();
                 if (result.success) {
                     alert('✅ 设备已删除');
-                    location.reload();
+                    window.location.reload();
                 } else {
                     alert('❌ ' + (result.error || '删除失败'));
                 }
@@ -700,7 +700,7 @@
                     if (result.success) {
                         alert('✅ 类型添加成功');
                         window.closeModal();
-                        location.reload();
+                        window.location.reload();
                     } else {
                         alert('❌ ' + (result.error || '添加失败'));
                     }
@@ -718,7 +718,7 @@
                 const result = await res.json();
                 if (result.success) {
                     alert('✅ 类型已删除');
-                    location.reload();
+                    window.location.reload();
                 } else {
                     alert('❌ ' + (result.error || '删除失败'));
                 }
