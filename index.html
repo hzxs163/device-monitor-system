@@ -80,20 +80,17 @@
     <!-- ============================================================ -->
     <!-- 月统计报表区域 -->
     <!-- ============================================================ -->
-    <!-- ============================================================ -->
-    <!-- 月统计报表区域 -->
-    <!-- ============================================================ -->
     <section class="statistics-section" id="statisticsSection" style="display:none;">
         <div class="section-header">
             <h2>📊 本月运行统计</h2>
             <button class="btn btn-export" id="exportBtn">📥 导出 Excel</button>
         </div>
-    
+
         <!-- 类型汇总 -->
         <div class="type-summary" id="typeSummary">
             <!-- JS 动态渲染 -->
         </div>
-    
+
         <!-- 设备排行 -->
         <div class="rank-table-wrapper">
             <h3>🏆 设备运行时长排行</h3>
@@ -118,7 +115,7 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- ============================================================ -->
-    <!-- 内联脚本：强制从 localStorage 恢复用户信息 -->
+    <!-- 内联脚本：强制从 localStorage 恢复用户信息 + 折叠功能 -->
     <!-- ============================================================ -->
     <script>
         (function() {
@@ -153,6 +150,23 @@
                 localStorage.removeItem('user');
             }
         })();
+
+        // ============================================================
+        // 折叠/展开分组
+        // ============================================================
+        window.toggleGroup = function(groupId) {
+            const content = document.getElementById(groupId + '-content');
+            const arrow = document.getElementById(groupId + '-arrow');
+            if (!content) return;
+
+            if (content.style.display === 'none') {
+                content.style.display = 'grid';
+                if (arrow) arrow.textContent = '▼ ' + arrow.textContent.replace('▶ ', '').replace('▼ ', '');
+            } else {
+                content.style.display = 'none';
+                if (arrow) arrow.textContent = '▶ ' + arrow.textContent.replace('▼ ', '').replace('▶ ', '');
+            }
+        };
     </script>
 
     <!-- ============================================================ -->
@@ -375,9 +389,7 @@
         };
 
         // ============================================================
-        // ============================================================
         // 内联管理功能（不依赖 admin.js）
-        // ============================================================
         // ============================================================
 
         function escapeHtml(text) {
