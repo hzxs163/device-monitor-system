@@ -32,7 +32,7 @@ async function parseJSON(request) {
 // ================================================================
 // 开机
 // ================================================================
-async function handleStart(request, env) {
+async function handleStart(request, env, user) {
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
@@ -46,7 +46,7 @@ async function handleStart(request, env) {
 
     try {
         const deviceStmt = env.DB.prepare(`
-            SELECT id, name, status, current_start_time
+            SELECT id, name, tag, status, current_start_time
             FROM devices
             WHERE id = ? AND is_deleted = 0
         `);
@@ -73,6 +73,30 @@ async function handleStart(request, env) {
         `);
         await updateStmt.bind(now, deviceId).run();
 
+        // ============================================================
+        // 记录普通用户操作日志
+        // ============================================================
+        if (user && user.role !== 'admin') {
+            try {
+                const logStmt = env.DB.prepare(`
+                    INSERT INTO user_operations (device_id, device_name, device_tag, operator_id, operator_name, action, duration_seconds)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `);
+                await logStmt.bind(
+                    deviceId,
+                    device.name,
+                    device.tag || '',
+                    user.id,
+                    user.nickname || user.username,
+                    'start',
+                    null
+                ).run();
+            } catch (logErr) {
+                console.error('[Records] 记录操作日志失败:', logErr);
+                // 不影响主流程
+            }
+        }
+
         return success({ deviceId, start_time: now }, `${device.name} 已开机`);
     } catch (err) {
         console.error('[Records] 开机失败:', err);
@@ -83,7 +107,7 @@ async function handleStart(request, env) {
 // ================================================================
 // 停机
 // ================================================================
-async function handleStop(request, env) {
+async function handleStop(request, env, user) {
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
@@ -97,7 +121,7 @@ async function handleStop(request, env) {
 
     try {
         const deviceStmt = env.DB.prepare(`
-            SELECT id, name, status, current_start_time
+            SELECT id, name, tag, status, current_start_time
             FROM devices
             WHERE id = ? AND is_deleted = 0
         `);
@@ -139,6 +163,30 @@ async function handleStop(request, env) {
         `);
         await deviceUpdateStmt.bind(deviceId).run();
 
+        // ============================================================
+        // 记录普通用户操作日志
+        // ============================================================
+        if (user && user.role !== 'admin') {
+            try {
+                const logStmt = env.DB.prepare(`
+                    INSERT INTO user_operations (device_id, device_name, device_tag, operator_id, operator_name, action, duration_seconds)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `);
+                await logStmt.bind(
+                    deviceId,
+                    device.name,
+                    device.tag || '',
+                    user.id,
+                    user.nickname || user.username,
+                    'stop',
+                    duration
+                ).run();
+            } catch (logErr) {
+                console.error('[Records] 记录操作日志失败:', logErr);
+                // 不影响主流程
+            }
+        }
+
         return success({
             deviceId,
             duration_seconds: duration,
@@ -155,7 +203,7 @@ async function handleStop(request, env) {
 // 路由入口 - 使用 includes 匹配，最宽松
 // ================================================================
 export async function onRequest(context) {
-    const { request, env } = context;
+    const { request, env, user } = context;
     const url = new URL(request.url);
     const method = request.method;
     const path = url.pathname;
@@ -167,14 +215,14 @@ export async function onRequest(context) {
         // 开机
         if (path.includes('/start')) {
             if (method === 'POST') {
-                return handleStart(request, env);
+                return handleStart(request, env, user);
             }
             return error('方法不允许', 405);
         }
         // 停机
         if (path.includes('/stop')) {
             if (method === 'POST') {
-                return handleStop(request, env);
+                return handleStop(request, env, user);
             }
             return error('方法不允许', 405);
         }
