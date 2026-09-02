@@ -121,6 +121,17 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- ============================================================ -->
+    <!-- 操作记录区域 -->
+    <!-- ============================================================ -->
+    <div id="operationsSection" style="padding:12px 16px;margin-top:16px;background:#fff;border-radius:12px;border:1px solid #eef2f7;display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3 id="operationsTitle" style="font-size:16px;font-weight:600;color:#1e293b;">📋 我的操作记录</h3>
+            <span id="operationsCount" style="font-size:13px;color:#94a3b8;"></span>
+        </div>
+        <div id="operationsList"></div>
+    </div>
+
+    <!-- ============================================================ -->
     <!-- 内联脚本：强制从 localStorage 恢复用户信息 + 折叠功能 -->
     <!-- ============================================================ -->
     <script>
@@ -285,6 +296,9 @@
             // 9. 绑定事件
             bindEvents();
 
+            // 10. 加载操作记录
+            await loadOperations();
+
             console.log('✅ 设备运行监控系统初始化完成');
         }
 
@@ -379,6 +393,87 @@
                     closeModal();
                 }
             });
+        }
+
+        // ============================================================
+        // 操作记录
+        // ============================================================
+
+        // 加载操作记录
+        async function loadOperations() {
+            const section = document.getElementById('operationsSection');
+            const list = document.getElementById('operationsList');
+            const count = document.getElementById('operationsCount');
+            const title = document.getElementById('operationsTitle');
+
+            if (!section || !list) return;
+
+            // 检查用户是否登录
+            const user = window.__currentUser;
+            if (!user) {
+                section.style.display = 'none';
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/operations?limit=20');
+                const result = await res.json();
+
+                if (!result.success) {
+                    console.error('加载操作记录失败:', result.error);
+                    section.style.display = 'none';
+                    return;
+                }
+
+                const logs = result.data || [];
+
+                if (logs.length === 0) {
+                    section.style.display = 'block';
+                    list.innerHTML = `<div style="text-align:center;color:#94a3b8;padding:16px 0;">暂无操作记录</div>`;
+                    if (count) count.textContent = '共 0 条记录';
+                    return;
+                }
+
+                // 显示区域
+                section.style.display = 'block';
+
+                // 标题
+                if (title) {
+                    title.textContent = user.role === 'admin' ? '📋 操作日志' : '📋 我的操作记录';
+                }
+
+                // 计数
+                if (count) {
+                    count.textContent = `共 ${logs.length} 条记录（最近）`;
+                }
+
+                // 渲染列表
+                let html = '';
+                logs.forEach(log => {
+                    const actionText = log.action === 'start' ? '开机' : '停机';
+                    const durationText = log.duration_text ? `运行 ${log.duration_text}` : '';
+                    const operatorText = user.role === 'admin' ? ` ${log.operator_name}  ` : '';
+
+                    html += `
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #f1f4f9;font-size:14px;">
+                            <span>
+                                <span style="color:#94a3b8;">${log.created_at}</span>
+                                ${operatorText}
+                                <span style="font-weight:500;">${log.device_name}</span>
+                                <span style="color:#94a3b8;">${log.device_tag}</span>
+                                <span style="color:${log.action === 'start' ? '#22c55e' : '#ef4444'};font-weight:500;">${actionText}</span>
+                                ${durationText ? `<span style="color:#94a3b8;">${durationText}</span>` : ''}
+                            </span>
+                        </div>
+                    `;
+                });
+
+                list.innerHTML = html;
+
+            } catch (err) {
+                console.error('加载操作记录异常:', err);
+                section.style.display = 'none';
+            }
         }
 
         // ============================================================
