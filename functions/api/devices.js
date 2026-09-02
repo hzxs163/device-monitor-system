@@ -63,7 +63,7 @@ export async function onRequestPost({ request, env }) {
         return error('无效的请求数据', 400);
     }
 
-    const { name, tag, type, location } = body;
+    const { name, tag, model, type, location } = body;
 
     // 参数校验
     if (!name || name.trim() === '') {
@@ -89,19 +89,26 @@ export async function onRequestPost({ request, env }) {
         // 获取或创建类型
         const typeId = await getOrCreateType(type.trim(), env);
 
-        // 插入设备
+        // 插入设备（包含 model 字段）
         const insertStmt = env.DB.prepare(`
-            INSERT INTO devices (name, tag, type_id, location)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO devices (name, tag, model, type_id, location)
+            VALUES (?, ?, ?, ?, ?)
         `);
         const result = await insertStmt
-            .bind(name.trim(), tag.trim(), typeId, location?.trim() || null)
+            .bind(
+                name.trim(),
+                tag.trim(),
+                model?.trim() || null,
+                typeId,
+                location?.trim() || null
+            )
             .run();
 
         return success({
             id: result.meta?.last_row_id || null,
             name: name.trim(),
             tag: tag.trim(),
+            model: model?.trim() || null,
             type: type.trim(),
             location: location?.trim() || null,
         }, '设备添加成功');
@@ -134,7 +141,7 @@ export async function onRequestPut({ request, env, params }) {
         return error('无效的请求数据', 400);
     }
 
-    const { name, tag, type, location } = body;
+    const { name, tag, model, type, location } = body;
 
     if (!name || name.trim() === '') {
         return error('设备名称不能为空', 400);
@@ -165,13 +172,21 @@ export async function onRequestPut({ request, env, params }) {
 
         const typeId = await getOrCreateType(type.trim(), env);
 
+        // 更新设备（包含 model 字段）
         const updateStmt = env.DB.prepare(`
             UPDATE devices
-            SET name = ?, tag = ?, type_id = ?, location = ?
+            SET name = ?, tag = ?, model = ?, type_id = ?, location = ?
             WHERE id = ?
         `);
         await updateStmt
-            .bind(name.trim(), tag.trim(), typeId, location?.trim() || null, deviceId)
+            .bind(
+                name.trim(),
+                tag.trim(),
+                model?.trim() || null,
+                typeId,
+                location?.trim() || null,
+                deviceId
+            )
             .run();
 
         return success({ id: deviceId }, '设备更新成功');
