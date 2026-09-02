@@ -152,6 +152,19 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const method = request.method;
 
+    // 处理 OPTIONS 预检请求
+    if (method === 'OPTIONS') {
+        return new Response(null, {
+            status: 204,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Max-Age': '86400',
+            },
+        });
+    }
+
     // POST /api/auth → 登录
     if (method === 'POST') {
         return handleLogin(request, env);
