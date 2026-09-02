@@ -37,6 +37,12 @@ export async function onRequest(context) {
         return authOnRequest(context);
     }
 
+    // 如果路径以 /api/users 开头，交给 users.js 处理
+    if (path.startsWith('/api/users')) {
+        const { onRequest: usersOnRequest } = await import('./users.js');
+        return usersOnRequest(context);
+    }
+
     // 其他 /api 请求返回 404
     return new Response(JSON.stringify({ success: false, error: '接口不存在' }), {
         status: 404,
