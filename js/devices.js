@@ -161,9 +161,15 @@ export function renderDevices() {
         const isRunning = device.status === 1;
         const statusText = isRunning ? '运行中' : '已停机';
         const statusClass = isRunning ? 'running' : 'stopped';
-        const durationText = isRunning && device.current_start_time
+
+        // 本次运行时长
+        const currentDuration = isRunning && device.current_start_time
             ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
             : '--';
+
+        // 本月运行时长（从统计数据中获取）
+        const monthlyHours = device.monthly_hours || 0;
+        const monthlyText = monthlyHours > 0 ? `${monthlyHours}小时` : '0小时';
 
         const actionBtn = isRunning
             ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
@@ -183,8 +189,9 @@ export function renderDevices() {
                     <span class="device-type">${escapeHtml(device.type || '未分类')}</span>
                 </div>
                 <div class="card-row">
-                    <span class="device-duration">
-                        ${isRunning ? `本次运行: ${durationText}` : '已停机'}
+                    <span class="device-duration" style="display:flex;justify-content:space-between;font-size:var(--text-sm);">
+                        <span>本月运行: ${monthlyText}</span>
+                        <span>本次运行: ${currentDuration}</span>
                     </span>
                 </div>
                 <div class="card-actions">
