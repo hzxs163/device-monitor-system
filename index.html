@@ -123,7 +123,6 @@
             const saved = localStorage.getItem('user');
             if (!saved) {
                 console.log('[Index] 无用户信息，跳转登录');
-                // 但先不跳转，让正常流程走
                 return;
             }
             try {
@@ -176,16 +175,6 @@
         } from '/js/devices.js';
         import { startDevice, stopDevice } from '/js/operations.js';
         import { loadStatistics, renderTypeSummary, renderRankTable } from '/js/statistics.js';
-        import {
-            renderAdminPanel,
-            renderUserManagement,
-            renderTypeManagement,
-            showAddDeviceModal,
-            showEditDeviceModal,
-            showAddUserModal,
-            showEditUserModal,
-            showAddTypeModal
-        } from '/js/admin.js';
 
         // ============================================================
         // 全局状态
@@ -317,9 +306,13 @@
                 }, 300);
             });
 
-            // 管理员入口
+            // 管理员入口 - 使用内联管理功能
             adminEntryBtn.addEventListener('click', () => {
-                renderAdminPanel();
+                if (typeof window.openAdminPanel === 'function') {
+                    window.openAdminPanel();
+                } else {
+                    alert('管理功能加载中，请稍后重试');
+                }
             });
 
             // 导出 Excel
@@ -376,6 +369,362 @@
             renderTypeSummary();
             renderRankTable();
             updateStatsBar();
+        };
+
+        // ============================================================
+        // ============================================================
+        // 内联管理功能（不依赖 admin.js）
+        // ============================================================
+        // ============================================================
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadDeviceTypes() {
+            try {
+                const res = await fetch('/api/types');
+                const data = await res.json();
+                return data.success ? data.data : [];
+            } catch (e) {
+                console.error('加载类型失败:', e);
+                return [];
+            }
+        }
+
+        async function renderDeviceManagement() {
+            const container = document.getElementById('adminTabContent');
+            if (!container) return;
+
+            const devices = window.__devices || [];
+            const types = await loadDeviceTypes();
+
+            let html = `
+                <div style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="btn btn-primary" onclick="window._inlineAddDevice()">➕ 添加设备</button>
+                    <button class="btn btn-primary" onclick="window._inlineAddType()">🏷️ 添加类型</button>
+                    <span style="font-size:14px;color:var(--gray-500);align-self:center;">
+                        共 ${devices.filter(d => !d.is_deleted).length} 台设备
+                    </span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="admin-list">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>设备名称</th>
+                                <th>位号</th>
+                                <th>类型</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${devices.filter(d => !d.is_deleted).map(d => `
+                                <tr>
+                                    <td>${d.id}</td>
+                                    <td><strong>${escapeHtml(d.name)}</strong></td>
+                                    <td>${escapeHtml(d.tag || '-')}</td>
+                                    <td>${escapeHtml(d.type || '-')}</td>
+                                    <td>${d.status === 1 ? '🟢 运行中' : '⚪ 已停机'}</td>
+                                    <td>
+                                        <div class="actions">
+                                            <button class="btn-edit" onclick="window._inlineEditDevice(${d.id})">✏️</button>
+                                            <button class="btn-delete" onclick="window._inlineDeleteDevice(${d.id})">🗑️</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                            ${devices.filter(d => !d.is_deleted).length === 0 ? `
+                                <tr><td colspan="6" class="text-center text-muted">暂无设备</td></tr>
+                            ` : ''}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        async function renderTypeManagementInline() {
+            const container = document.getElementById('adminTabContent');
+            if (!container) return;
+            const types = await loadDeviceTypes();
+            let html = `
+                <div style="margin-bottom:16px;">
+                    <button class="btn btn-primary" onclick="window._inlineAddType()">➕ 添加类型</button>
+                    <span style="font-size:14px;color:var(--gray-500);margin-left:12px;">共 ${types.length} 种类型</span>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    ${types.map(t => `
+                        <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;background:var(--gray-100);font-size:14px;">
+                            ${escapeHtml(t.name)}
+                            <button onclick="window._inlineDeleteType(${t.id})" style="color:var(--gray-400);background:none;border:none;cursor:pointer;font-size:16px;">✕</button>
+                        </span>
+                    `).join('')}
+                    ${types.length === 0 ? '<span class="text-muted">暂无类型</span>' : ''}
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        // 打开管理面板
+        window.openAdminPanel = function() {
+            const html = `
+                <div class="admin-panel">
+                    <div class="admin-tabs">
+                        <button class="admin-tab active" data-tab="devices">📟 设备管理</button>
+                        <button class="admin-tab" data-tab="types">🏷️ 类型管理</button>
+                    </div>
+                    <div class="admin-content">
+                        <div id="adminTabContent"></div>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="window.closeModal()">关闭</button>
+                    </div>
+                </div>
+            `;
+            window.openModal(html);
+            renderDeviceManagement();
+
+            document.querySelectorAll('.admin-tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    if (this.dataset.tab === 'devices') renderDeviceManagement();
+                    else if (this.dataset.tab === 'types') renderTypeManagementInline();
+                });
+            });
+        };
+
+        // 内联添加设备
+        window._inlineAddDevice = async function() {
+            const types = await loadDeviceTypes();
+            const typeOptions = types.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+
+            const html = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>➕ 添加设备</h2>
+                        <button class="modal-close" onclick="window.closeModal()">✕</button>
+                    </div>
+                    <form id="inlineAddDeviceForm">
+                        <div class="form-group">
+                            <label>设备名称 *</label>
+                            <input type="text" id="inlineDevName" placeholder="如：空压机05" required />
+                        </div>
+                        <div class="form-group">
+                            <label>位号 *</label>
+                            <input type="text" id="inlineDevTag" placeholder="如：A-005" required />
+                        </div>
+                        <div class="form-group">
+                            <label>设备类型 *</label>
+                            <select id="inlineDevType">${typeOptions}</select>
+                        </div>
+                        <div class="form-group">
+                            <label>位置</label>
+                            <input type="text" id="inlineDevLocation" placeholder="如：车间A" />
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" onclick="window.closeModal()">取消</button>
+                            <button type="submit" class="btn btn-primary">确认添加</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+
+            window.openModal(html);
+
+            document.getElementById('inlineAddDeviceForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const name = document.getElementById('inlineDevName').value.trim();
+                const tag = document.getElementById('inlineDevTag').value.trim();
+                const type = document.getElementById('inlineDevType').value;
+                const location = document.getElementById('inlineDevLocation').value.trim();
+
+                if (!name || !tag || !type) {
+                    alert('请填写完整信息');
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/api/devices', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, tag, type, location })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('✅ 设备添加成功');
+                        window.closeModal();
+                        location.reload();
+                    } else {
+                        alert('❌ ' + (result.error || '添加失败'));
+                    }
+                } catch (err) {
+                    alert('❌ 请求失败: ' + err.message);
+                }
+            });
+        };
+
+        // 内联编辑设备
+        window._inlineEditDevice = async function(deviceId) {
+            const devices = window.__devices || [];
+            const device = devices.find(d => d.id === deviceId);
+            if (!device) {
+                alert('设备不存在');
+                return;
+            }
+            const types = await loadDeviceTypes();
+            const typeOptions = types.map(t =>
+                `<option value="${t.name}" ${t.name === device.type ? 'selected' : ''}>${t.name}</option>`
+            ).join('');
+
+            const html = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>✏️ 编辑设备</h2>
+                        <button class="modal-close" onclick="window.closeModal()">✕</button>
+                    </div>
+                    <form id="inlineEditDeviceForm">
+                        <div class="form-group">
+                            <label>设备名称 *</label>
+                            <input type="text" id="inlineEditDevName" value="${escapeHtml(device.name)}" required />
+                        </div>
+                        <div class="form-group">
+                            <label>位号 *</label>
+                            <input type="text" id="inlineEditDevTag" value="${escapeHtml(device.tag || '')}" required />
+                        </div>
+                        <div class="form-group">
+                            <label>设备类型 *</label>
+                            <select id="inlineEditDevType">${typeOptions}</select>
+                        </div>
+                        <div class="form-group">
+                            <label>位置</label>
+                            <input type="text" id="inlineEditDevLocation" value="${escapeHtml(device.location || '')}" />
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" onclick="window.closeModal()">取消</button>
+                            <button type="submit" class="btn btn-primary">保存修改</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+
+            window.openModal(html);
+
+            document.getElementById('inlineEditDeviceForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const name = document.getElementById('inlineEditDevName').value.trim();
+                const tag = document.getElementById('inlineEditDevTag').value.trim();
+                const type = document.getElementById('inlineEditDevType').value;
+                const location = document.getElementById('inlineEditDevLocation').value.trim();
+
+                if (!name || !tag || !type) {
+                    alert('请填写完整信息');
+                    return;
+                }
+
+                try {
+                    const res = await fetch(`/api/devices/${deviceId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, tag, type, location })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('✅ 设备已更新');
+                        window.closeModal();
+                        location.reload();
+                    } else {
+                        alert('❌ ' + (result.error || '更新失败'));
+                    }
+                } catch (err) {
+                    alert('❌ 请求失败: ' + err.message);
+                }
+            });
+        };
+
+        // 内联删除设备
+        window._inlineDeleteDevice = async function(deviceId) {
+            if (!confirm('确认删除该设备？历史运行记录将保留。')) return;
+            try {
+                const res = await fetch(`/api/devices/${deviceId}`, { method: 'DELETE' });
+                const result = await res.json();
+                if (result.success) {
+                    alert('✅ 设备已删除');
+                    location.reload();
+                } else {
+                    alert('❌ ' + (result.error || '删除失败'));
+                }
+            } catch (err) {
+                alert('❌ 请求失败: ' + err.message);
+            }
+        };
+
+        // 内联添加类型
+        window._inlineAddType = function() {
+            const html = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>🏷️ 添加设备类型</h2>
+                        <button class="modal-close" onclick="window.closeModal()">✕</button>
+                    </div>
+                    <form id="inlineAddTypeForm">
+                        <div class="form-group">
+                            <label>类型名称 *</label>
+                            <input type="text" id="inlineTypeName" placeholder="如：风机" required />
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" onclick="window.closeModal()">取消</button>
+                            <button type="submit" class="btn btn-primary">确认添加</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            window.openModal(html);
+
+            document.getElementById('inlineAddTypeForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const name = document.getElementById('inlineTypeName').value.trim();
+                if (!name) { alert('请输入类型名称'); return; }
+                try {
+                    const res = await fetch('/api/types', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('✅ 类型添加成功');
+                        window.closeModal();
+                        location.reload();
+                    } else {
+                        alert('❌ ' + (result.error || '添加失败'));
+                    }
+                } catch (err) {
+                    alert('❌ 请求失败: ' + err.message);
+                }
+            });
+        };
+
+        // 内联删除类型
+        window._inlineDeleteType = async function(typeId) {
+            if (!confirm('确认删除该类型？')) return;
+            try {
+                const res = await fetch(`/api/types/${typeId}`, { method: 'DELETE' });
+                const result = await res.json();
+                if (result.success) {
+                    alert('✅ 类型已删除');
+                    location.reload();
+                } else {
+                    alert('❌ ' + (result.error || '删除失败'));
+                }
+            } catch (err) {
+                alert('❌ 请求失败: ' + err.message);
+            }
         };
 
         // ============================================================
