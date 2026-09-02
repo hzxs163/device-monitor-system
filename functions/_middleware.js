@@ -13,7 +13,9 @@ import { unauthorized, error } from './utils/response.js';
 // ================================================================
 
 const PUBLIC_PATHS = [
-    '/api/auth',   // ← 添加这一行，允许 POST /api/auth 登录
+    '/api/auth',
+    '/api/types',      // 允许添加类型
+    '/api/devices',    // 允许添加设备
 ];
 
 // ================================================================
