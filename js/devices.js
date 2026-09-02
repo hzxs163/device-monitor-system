@@ -38,12 +38,13 @@ export async function loadDevices(silent = false) {
             }
             allDevices = [];
             filteredDevices = [];
+            window.__devices = [];
             return [];
         }
 
         allDevices = result.data?.devices || [];
         typeList = result.data?.types || [];
-        window.__devices = allDevices;  // ← 添加这行
+        window.__devices = allDevices;
         applyFilters();
         return allDevices;
     } catch (error) {
@@ -53,6 +54,7 @@ export async function loadDevices(silent = false) {
         }
         allDevices = [];
         filteredDevices = [];
+        window.__devices = [];
         return [];
     }
 }
@@ -96,14 +98,13 @@ function applyFilters() {
     }
 }
 
-// 修正：切换类型后重新渲染标签
 export function switchType(type) {
     if (currentType === type) return;
     currentType = type;
     currentPage = 1;
     applyFilters();
     renderAll();
-    renderTypeTabs();  // ← 重新渲染标签，更新 active 状态
+    renderTypeTabs();
 }
 
 export function filterDevices(keyword) {
@@ -122,12 +123,10 @@ export function getTotalPages() {
 }
 
 export function getCurrentPageDevices() {
-    // 返回所有设备，不分页
     return filteredDevices;
 }
 
 export function goToPage(page) {
-    // 禁用翻页
     return;
 }
 
@@ -158,9 +157,7 @@ export function renderDevices() {
         return;
     }
 
-    // ============================================================
     // 按类型分组
-    // ============================================================
     const grouped = {};
     devices.forEach(device => {
         const type = device.type || '未分类';
@@ -179,18 +176,19 @@ export function renderDevices() {
         const total = typeDevices.length;
         const running = typeDevices.filter(d => d.status === 1).length;
         const stopped = total - running;
+        const groupId = 'group-' + type.replace(/\s/g, '-') + '-' + Date.now();
 
         html += `
-            <div class="type-group">
-                <div class="type-group-header">
-                    <span class="type-group-name">▼ ${escapeHtml(type)}</span>
+            <div class="type-group" data-group="${groupId}">
+                <div class="type-group-header" onclick="window.toggleGroup('${groupId}')" style="cursor:pointer;">
+                    <span class="type-group-name" id="${groupId}-arrow">▼ ${escapeHtml(type)}</span>
                     <span class="type-group-stats">
                         <span class="type-group-count">共 ${total} 台</span>
                         <span class="type-group-running">● ${running} 台开机</span>
                         <span class="type-group-stopped">○ ${stopped} 台停机</span>
                     </span>
                 </div>
-                <div class="type-group-grid">
+                <div class="type-group-grid" id="${groupId}-content">
         `;
 
         typeDevices.forEach(device => {
@@ -243,12 +241,12 @@ export function renderDevices() {
 
     grid.innerHTML = html;
 
+    // 绑定卡片按钮事件
     grid.querySelectorAll('[data-action]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const deviceId = parseInt(btn.dataset.id);
             const action = btn.dataset.action;
-
             if (action === 'start') {
                 handleStart(deviceId);
             } else if (action === 'stop') {
@@ -293,7 +291,6 @@ export function renderTypeTabs() {
 export function renderPagination() {
     const container = document.getElementById('pagination');
     if (!container) return;
-
     container.innerHTML = '';
 }
 
