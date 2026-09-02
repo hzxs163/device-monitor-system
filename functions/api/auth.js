@@ -23,7 +23,6 @@ async function getUserByUsername(username, env) {
         const result = await stmt.bind(username).first();
 
         if (!result) {
-            // 再查一次不限制 is_active，用于判断账号是否被禁用
             const stmtAll = env.DB.prepare(`
                 SELECT id, username, nickname, password_hash, password_salt, role, is_active
                 FROM users
@@ -47,10 +46,9 @@ async function getUserByUsername(username, env) {
 // 处理函数
 // ================================================================
 
-/**
- * 登录处理
- */
 async function handleLogin(request, env) {
+    console.log('[Auth] 登录请求收到');
+
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
@@ -114,9 +112,6 @@ async function handleLogin(request, env) {
     );
 }
 
-/**
- * 登出处理
- */
 function handleLogout() {
     const cookie = 'token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0';
 
@@ -135,9 +130,6 @@ function handleLogout() {
     );
 }
 
-/**
- * 获取当前用户信息
- */
 function handleMe({ user }) {
     if (!user) {
         return unauthorized('请先登录');
@@ -152,7 +144,7 @@ function handleMe({ user }) {
 }
 
 // ================================================================
-// 统一入口 - 使用 onRequest 替代 onRequestPost/onRequestGet
+// 统一入口
 // ================================================================
 
 export async function onRequest(context) {
@@ -160,29 +152,15 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const method = request.method;
 
-    // /api/auth/logout
-    if (url.pathname === '/api/auth/logout') {
-        if (method === 'POST') {
-            return handleLogout();
-        }
-        return error('方法不允许', 405);
+    // POST /api/auth → 登录
+    if (method === 'POST') {
+        return handleLogin(request, env);
     }
 
-    // /api/auth/me
-    if (url.pathname === '/api/auth/me') {
-        if (method === 'GET') {
-            return handleMe(context);
-        }
-        return error('方法不允许', 405);
+    // GET /api/auth → 获取用户信息
+    if (method === 'GET') {
+        return handleMe(context);
     }
 
-    // /api/auth/login (默认)
-    if (url.pathname === '/api/auth/login') {
-        if (method === 'POST') {
-            return handleLogin(request, env);
-        }
-        return error('方法不允许', 405);
-    }
-
-    return error('接口不存在', 404);
+    return error('方法不允许', 405);
 }
