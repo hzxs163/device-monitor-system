@@ -1,15 +1,21 @@
 // functions/api/_middleware.js
 // 这个文件会拦截所有 /api/* 请求，然后手动分发
 
-// 导入 records.js 里的处理函数
-import { onRequest as recordsOnRequest } from './records.js';
-
 export async function onRequest(context) {
     const url = new URL(context.request.url);
     const path = url.pathname;
 
+    console.log('[API Middleware] 请求路径:', path);
+
+    // 如果路径以 /api/statistics 开头，交给 statistics.js 处理
+    if (path.startsWith('/api/statistics')) {
+        const { onRequest: statsOnRequest } = await import('./statistics.js');
+        return statsOnRequest(context);
+    }
+
     // 如果路径以 /api/records 开头，交给 records.js 处理
     if (path.startsWith('/api/records')) {
+        const { onRequest: recordsOnRequest } = await import('./records.js');
         return recordsOnRequest(context);
     }
 
