@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>设备运行监控系统</title>
     <link rel="stylesheet" href="/css/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
 <body>
 
@@ -463,26 +464,95 @@
             container.innerHTML = html;
         }
 
+        // 内联类型管理（带排序、修改、删除）
         async function renderTypeManagementInline() {
             const container = document.getElementById('adminTabContent');
             if (!container) return;
+
             const types = await loadDeviceTypes();
+            const devices = window.__devices || [];
+
+            // 统计每种类型的设备数量
+            const typeCounts = {};
+            devices.forEach(d => {
+                const type = d.type || '未分类';
+                if (!typeCounts[type]) typeCounts[type] = 0;
+                typeCounts[type]++;
+            });
+
             let html = `
-                <div style="margin-bottom:16px;">
+                <div style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
                     <button class="btn btn-primary" onclick="window._inlineAddType()">➕ 添加类型</button>
-                    <span style="font-size:14px;color:var(--gray-500);margin-left:12px;">共 ${types.length} 种类型</span>
+                    <span style="font-size:13px;color:var(--gray-400);">拖动 ☰ 调整顺序</span>
                 </div>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                    ${types.map(t => `
-                        <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;background:var(--gray-100);font-size:14px;">
-                            ${escapeHtml(t.name)}
-                            <button onclick="window._inlineDeleteType(${t.id})" style="color:var(--gray-400);background:none;border:none;cursor:pointer;font-size:16px;">✕</button>
-                        </span>
-                    `).join('')}
-                    ${types.length === 0 ? '<span class="text-muted">暂无类型</span>' : ''}
+                <div id="typeSortableList" style="display:flex;flex-direction:column;gap:6px;">
+            `;
+
+            types.forEach((t, index) => {
+                const count = typeCounts[t.name] || 0;
+                const canDelete = count === 0;
+                html += `
+                    <div class="type-list-item" data-id="${t.id}" data-sort="${t.sort_order || index}">
+                        <span class="type-handle">☰</span>
+                        <span class="type-name">${escapeHtml(t.name)}</span>
+                        <span class="type-count">(${count}台设备)</span>
+                        <div class="type-actions">
+                            <button class="type-btn-edit" onclick="window._inlineEditType(${t.id}, '${escapeHtml(t.name)}')">【修改】</button>
+                            <button class="type-btn-delete" onclick="window._inlineDeleteType(${t.id})" ${canDelete ? '' : 'disabled'}>
+                                [删除]
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                </div>
+                <div style="margin-top:12px;font-size:12px;color:var(--gray-400);">
+                    共 ${types.length} 种类型
                 </div>
             `;
+
             container.innerHTML = html;
+
+            // 初始化 SortableJS（拖拽排序）
+            const sortableEl = document.getElementById('typeSortableList');
+            if (sortableEl) {
+                new Sortable(sortableEl, {
+                    handle: '.type-handle',
+                    animation: 150,
+                    onEnd: async function(evt) {
+                        const items = sortableEl.querySelectorAll('.type-list-item');
+                        const sortedIds = [];
+                        items.forEach(el => {
+                            const id = parseInt(el.dataset.id);
+                            if (!isNaN(id)) sortedIds.push(id);
+                        });
+                        await updateTypeOrder(sortedIds);
+                    }
+                });
+            }
+        }
+
+        // 更新类型顺序
+        async function updateTypeOrder(ids) {
+            try {
+                const res = await fetch('/api/types/order', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    await renderTypeManagementInline();
+                    await loadDevices();
+                    renderTypeTabs();
+                } else {
+                    console.error('更新顺序失败:', result.error);
+                }
+            } catch (err) {
+                console.error('更新顺序请求失败:', err);
+            }
         }
 
         // 打开管理面板
@@ -574,10 +644,8 @@
                     if (result.success) {
                         alert('✅ 设备添加成功');
                         window.closeModal();
-                        // 重新加载设备列表，刷新管理面板
                         await loadDevices();
                         renderDeviceManagement();
-                        // 同时刷新首页卡片
                         if (typeof window.reloadDevices === 'function') {
                             window.reloadDevices();
                         }
@@ -658,10 +726,8 @@
                     if (result.success) {
                         alert('✅ 设备已更新');
                         window.closeModal();
-                        // 重新加载设备列表，刷新管理面板
                         await loadDevices();
                         renderDeviceManagement();
-                        // 同时刷新首页卡片
                         if (typeof window.reloadDevices === 'function') {
                             window.reloadDevices();
                         }
@@ -682,10 +748,8 @@
                 const result = await res.json();
                 if (result.success) {
                     alert('✅ 设备已删除');
-                    // 重新加载设备列表，刷新管理面板
                     await loadDevices();
                     renderDeviceManagement();
-                    // 同时刷新首页卡片
                     if (typeof window.reloadDevices === 'function') {
                         window.reloadDevices();
                     }
@@ -733,9 +797,7 @@
                     if (result.success) {
                         alert('✅ 类型添加成功');
                         window.closeModal();
-                        // 重新加载类型管理
                         await renderTypeManagementInline();
-                        // 刷新首页类型标签和设备列表
                         await loadDevices();
                         renderTypeTabs();
                         if (typeof window.reloadDevices === 'function') {
@@ -743,6 +805,59 @@
                         }
                     } else {
                         alert('❌ ' + (result.error || '添加失败'));
+                    }
+                } catch (err) {
+                    alert('❌ 请求失败: ' + err.message);
+                }
+            });
+        };
+
+        // 内联修改类型
+        window._inlineEditType = function(typeId, currentName) {
+            const html = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>✏️ 编辑类型</h2>
+                        <button class="modal-close" onclick="window.closeModal()">✕</button>
+                    </div>
+                    <form id="inlineEditTypeForm">
+                        <div class="form-group">
+                            <label>类型名称 *</label>
+                            <input type="text" id="inlineEditTypeName" value="${escapeHtml(currentName)}" required />
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" onclick="window.closeModal()">取消</button>
+                            <button type="submit" class="btn btn-primary">保存修改</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+
+            window.openModal(html);
+
+            document.getElementById('inlineEditTypeForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const name = document.getElementById('inlineEditTypeName').value.trim();
+                if (!name) { alert('请输入类型名称'); return; }
+
+                try {
+                    const res = await fetch(`/api/types/${typeId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('✅ 类型已修改');
+                        window.closeModal();
+                        await renderTypeManagementInline();
+                        await loadDevices();
+                        renderTypeTabs();
+                        if (typeof window.reloadDevices === 'function') {
+                            window.reloadDevices();
+                        }
+                    } else {
+                        alert('❌ ' + (result.error || '修改失败'));
                     }
                 } catch (err) {
                     alert('❌ 请求失败: ' + err.message);
