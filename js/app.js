@@ -25,9 +25,10 @@ window.__currentUser = null;
 export async function initApp() {
     try {
         // ============================================================
-        // 直接从 localStorage 读取用户信息
+        // 从 localStorage 读取用户信息
         // ============================================================
         const savedUser = localStorage.getItem('user');
+
         if (!savedUser) {
             console.log('[App] 未找到用户信息，跳转登录页');
             window.location.href = '/login.html';
@@ -57,7 +58,7 @@ export async function initApp() {
         console.log('[App] 用户:', user.username, '角色:', user.role);
 
         // ============================================================
-        // 正常初始化流程
+        // 正常初始化流程（设备、统计等）
         // ============================================================
 
         // 设置当前月份
