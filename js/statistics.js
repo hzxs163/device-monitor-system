@@ -58,52 +58,34 @@ export async function loadStatistics(year, month, silent = false) {
         // ============================================================
         // 把月度运行时长合并到设备列表
         // ============================================================
-        if (data.ranking) {
+        if (data.ranking && window.__devices && window.__devices.length > 0) {
             const rankingMap = {};
             data.ranking.forEach(item => {
                 rankingMap[item.device_id] = item.hours || 0;
             });
-
-            // 更新 window.__devices
-            if (window.__devices && window.__devices.length > 0) {
-                window.__devices.forEach(device => {
-                    device.monthly_hours = rankingMap[device.id] || 0;
-                });
-                console.log('[Statistics] window.__devices 合并完成:', window.__devices.length, '台设备');
-            }
-
-            // 同时更新 allDevices（用于 filteredDevices）
-            if (allDevices && allDevices.length > 0) {
-                allDevices.forEach(device => {
-                    device.monthly_hours = rankingMap[device.id] || 0;
-                });
-                console.log('[Statistics] allDevices 合并完成:', allDevices.length, '台设备');
-            }
-
-            // 如果都没有，延迟重试
-            if ((!window.__devices || window.__devices.length === 0) && (!allDevices || allDevices.length === 0)) {
-                console.warn('[Statistics] 设备列表未加载，延迟合并');
-                setTimeout(() => {
-                    const rankingMapRetry = {};
+            window.__devices.forEach(device => {
+                device.monthly_hours = rankingMap[device.id] || 0;
+            });
+            console.log('[Statistics] 月度时长合并完成:', window.__devices.length, '台设备');
+        } else if (data.ranking && (!window.__devices || window.__devices.length === 0)) {
+            console.warn('[Statistics] window.__devices 尚未加载，延迟合并');
+            // 延迟重试
+            setTimeout(() => {
+                if (window.__devices && window.__devices.length > 0) {
+                    const rankingMap = {};
                     data.ranking.forEach(item => {
-                        rankingMapRetry[item.device_id] = item.hours || 0;
+                        rankingMap[item.device_id] = item.hours || 0;
                     });
-                    if (window.__devices && window.__devices.length > 0) {
-                        window.__devices.forEach(device => {
-                            device.monthly_hours = rankingMapRetry[device.id] || 0;
-                        });
-                    }
-                    if (allDevices && allDevices.length > 0) {
-                        allDevices.forEach(device => {
-                            device.monthly_hours = rankingMapRetry[device.id] || 0;
-                        });
-                    }
+                    window.__devices.forEach(device => {
+                        device.monthly_hours = rankingMap[device.id] || 0;
+                    });
                     console.log('[Statistics] 延迟合并完成');
+                    // 重新渲染设备卡片
                     import('/js/devices.js').then(module => {
                         module.renderDevices();
                     });
-                }, 500);
-            }
+                }
+            }, 500);
         }
 
         // 更新统计栏
@@ -118,9 +100,6 @@ export async function loadStatistics(year, month, silent = false) {
         return statisticsData;
     }
 }
-
-// 明确导出 loadStatistics
-export { loadStatistics };
 
 /**
  * 重新加载统计数据（强制刷新）
@@ -357,7 +336,6 @@ export {
     statisticsData,
     currentYear,
     currentMonth,
-    loadStatistics,
 };
 
 export default {
