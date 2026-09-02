@@ -43,6 +43,12 @@ export async function onRequest(context) {
         return usersOnRequest(context);
     }
 
+    // 如果路径以 /api/operations 开头，交给 operations.js 处理
+    if (path.startsWith('/api/operations')) {
+        const { onRequest: opsOnRequest } = await import('./operations.js');
+        return opsOnRequest(context);
+    }
+
     // 其他 /api 请求返回 404
     return new Response(JSON.stringify({ success: false, error: '接口不存在' }), {
         status: 404,
