@@ -158,49 +158,90 @@ export function renderDevices() {
         return;
     }
 
-    grid.innerHTML = devices.map(device => {
-        const isRunning = device.status === 1;
-        const statusText = isRunning ? '运行中' : '已停机';
-        const statusClass = isRunning ? 'running' : 'stopped';
+    // ============================================================
+    // 按类型分组
+    // ============================================================
+    const grouped = {};
+    devices.forEach(device => {
+        const type = device.type || '未分类';
+        if (!grouped[type]) {
+            grouped[type] = [];
+        }
+        grouped[type].push(device);
+    });
 
-        // 本次运行时长
-        const currentDuration = isRunning && device.current_start_time
-            ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
-            : '--';
+    const sortedTypes = Object.keys(grouped).sort();
 
-        // 本月运行时长（从统计数据中获取）
-        const monthlyHours = device.monthly_hours || 0;
-        const monthlyText = monthlyHours > 0 ? `${monthlyHours}小时` : '0小时';
+    let html = '';
 
-        const actionBtn = isRunning
-            ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
-            : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
+    sortedTypes.forEach(type => {
+        const typeDevices = grouped[type];
+        const total = typeDevices.length;
+        const running = typeDevices.filter(d => d.status === 1).length;
+        const stopped = total - running;
 
-        return `
-            <div class="device-card ${statusClass}" data-id="${device.id}">
-                <div class="card-row">
-                    <span class="device-name">${escapeHtml(device.name)}</span>
-                    <span class="device-status">
-                        <span class="status-dot ${statusClass}"></span>
-                        ${statusText}
+        html += `
+            <div class="type-group">
+                <div class="type-group-header">
+                    <span class="type-group-name">▼ ${escapeHtml(type)}</span>
+                    <span class="type-group-stats">
+                        <span class="type-group-count">共 ${total} 台</span>
+                        <span class="type-group-running">● ${running} 台开机</span>
+                        <span class="type-group-stopped">○ ${stopped} 台停机</span>
                     </span>
                 </div>
-                <div class="card-row">
-                    <span class="device-tag">位号: ${escapeHtml(device.tag || '-')}</span>
-                    <span class="device-type">${escapeHtml(device.type || '未分类')}</span>
+                <div class="type-group-grid">
+        `;
+
+        typeDevices.forEach(device => {
+            const isRunning = device.status === 1;
+            const statusText = isRunning ? '运行中' : '已停机';
+            const statusClass = isRunning ? 'running' : 'stopped';
+
+            const currentDuration = isRunning && device.current_start_time
+                ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
+                : '--';
+
+            const monthlyHours = device.monthly_hours || 0;
+            const monthlyText = monthlyHours > 0 ? `${monthlyHours}小时` : '0小时';
+
+            const actionBtn = isRunning
+                ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
+                : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
+
+            html += `
+                <div class="device-card ${statusClass}" data-id="${device.id}">
+                    <div class="card-row">
+                        <span class="device-name">${escapeHtml(device.name)}</span>
+                        <span class="device-status">
+                            <span class="status-dot ${statusClass}"></span>
+                            ${statusText}
+                        </span>
+                    </div>
+                    <div class="card-row">
+                        <span class="device-tag">位号: ${escapeHtml(device.tag || '-')}</span>
+                        <span class="device-type">${escapeHtml(device.type || '未分类')}</span>
+                    </div>
+                    <div class="card-row">
+                        <span class="device-duration" style="display:flex;justify-content:space-between;font-size:var(--text-sm);gap:12px;">
+                            <span>本月运行: ${monthlyText}</span>
+                            <span>本次运行: ${currentDuration}</span>
+                        </span>
+                    </div>
+                    <div class="card-actions">
+                        ${actionBtn}
+                    </div>
                 </div>
-                <div class="card-row">
-                    <span class="device-duration" style="display:flex;justify-content:space-between;font-size:var(--text-sm);gap:12px;">
-                        <span>本月运行: ${monthlyText}</span>
-                        <span>本次运行: ${currentDuration}</span>
-                    </span>
-                </div>
-                <div class="card-actions">
-                    ${actionBtn}
+            `;
+        });
+
+        html += `
                 </div>
             </div>
         `;
-    }).join('');
+    });
+
+    grid.innerHTML = html;
 
     grid.querySelectorAll('[data-action]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -253,7 +294,6 @@ export function renderPagination() {
     const container = document.getElementById('pagination');
     if (!container) return;
 
-    // 分页已禁用，清空分页控件
     container.innerHTML = '';
 }
 
