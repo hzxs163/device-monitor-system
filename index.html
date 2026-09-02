@@ -309,6 +309,9 @@
         // ============================================================
         // 绑定事件
         // ============================================================
+        // ============================================================
+        // 绑定事件
+        // ============================================================
         function bindEvents() {
             // 退出登录
             logoutBtn.addEventListener('click', () => {
@@ -325,6 +328,28 @@
                     filterDevices(keyword);
                 }, 300);
             });
+
+            // 搜索框清除按钮
+            const clearBtn = document.getElementById('clearSearchBtn');
+            if (searchInput && clearBtn) {
+                // 输入时显示/隐藏清除按钮
+                searchInput.addEventListener('input', function() {
+                    if (this.value.trim().length > 0) {
+                        clearBtn.style.display = 'block';
+                    } else {
+                        clearBtn.style.display = 'none';
+                    }
+                });
+
+                // 点击清除
+                clearBtn.addEventListener('click', function() {
+                    searchInput.value = '';
+                    searchInput.focus();
+                    clearBtn.style.display = 'none';
+                    // 触发搜索（清空后重新加载设备列表）
+                    filterDevices('');
+                });
+            }
 
             // 管理员入口 - 使用内联管理功能
             adminEntryBtn.addEventListener('click', () => {
