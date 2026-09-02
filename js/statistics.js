@@ -56,7 +56,7 @@ export async function loadStatistics(year, month, silent = false) {
         window.__statTotalHours = statisticsData.total_hours;
 
         // ============================================================
-        // 把月度运行时长合并到设备列表.
+        // 把月度运行时长合并到设备列表
         // ============================================================
         if (data.ranking && window.__devices && window.__devices.length > 0) {
             const rankingMap = {};
