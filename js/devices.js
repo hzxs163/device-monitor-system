@@ -46,7 +46,7 @@ export async function loadDevices(silent = false) {
         allDevices = result.data?.devices || [];
         typeList = result.data?.types || [];
         window.__devices = allDevices;
-        window.__allTypes = typeList;  // 保存类型列表到全局
+        window.__allTypes = typeList;
         applyFilters();
         return allDevices;
     } catch (error) {
@@ -228,7 +228,7 @@ export function renderDevices() {
                 : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
 
             html += `
-                <div class="device-card ${statusClass}" data-id="${device.id}">
+                <div class="device-card ${statusClass}" data-id="${device.id}" onclick="window.showDeviceDetail(${device.id})" style="cursor:pointer;">
                     <div class="card-row">
                         <span class="device-name">${escapeHtml(device.name)}</span>
                         <span class="device-status">
@@ -260,6 +260,19 @@ export function renderDevices() {
     });
 
     grid.innerHTML = html;
+
+    // 绑定卡片点击事件（排除按钮点击）
+    grid.querySelectorAll('.device-card').forEach(card => {
+        card.addEventListener('click', function(e) {
+            if (e.target.closest('.btn-start') || e.target.closest('.btn-stop')) {
+                return;
+            }
+            const deviceId = parseInt(this.dataset.id);
+            if (typeof window.showDeviceDetail === 'function') {
+                window.showDeviceDetail(deviceId);
+            }
+        });
+    });
 
     // 绑定卡片按钮事件
     grid.querySelectorAll('[data-action]').forEach(btn => {
