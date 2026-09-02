@@ -22,7 +22,7 @@ let onDeviceChange = null;
 
 // 每页数量
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-const pageSize = DEFAULT_PAGE_SIZE;   // ← 加上这行！
+const pageSize = DEFAULT_PAGE_SIZE;
 
 // ================================================================
 // 1. 加载设备列表
@@ -95,12 +95,14 @@ function applyFilters() {
     }
 }
 
+// 修正：切换类型后重新渲染标签
 export function switchType(type) {
     if (currentType === type) return;
     currentType = type;
     currentPage = 1;
     applyFilters();
     renderAll();
+    renderTypeTabs();  // ← 重新渲染标签，更新 active 状态
 }
 
 export function filterDevices(keyword) {
@@ -119,17 +121,13 @@ export function getTotalPages() {
 }
 
 export function getCurrentPageDevices() {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const end = start + PAGE_SIZE;
-    return filteredDevices.slice(start, end);
+    // 返回所有设备，不分页
+    return filteredDevices;
 }
 
 export function goToPage(page) {
-    const total = getTotalPages();
-    if (page < 1 || page > total) return;
-    currentPage = page;
-    renderDevices();
-    renderPagination();
+    // 禁用翻页
+    return;
 }
 
 // ================================================================
@@ -225,8 +223,9 @@ export function renderTypeTabs() {
 
     types.forEach(type => {
         const count = allDevices.filter(d => d.type === type && !d.is_deleted).length;
+        const isActive = currentType === type;
         html += `
-            <button class="type-tab ${currentType === type ? 'active' : ''}" data-type="${escapeHtml(type)}">
+            <button class="type-tab ${isActive ? 'active' : ''}" data-type="${escapeHtml(type)}">
                 ${escapeHtml(type)} <span class="badge">${count}</span>
             </button>
         `;
@@ -246,39 +245,8 @@ export function renderPagination() {
     const container = document.getElementById('pagination');
     if (!container) return;
 
-    const total = getTotalPages();
-    const current = currentPage;
-
-    if (total <= 1) {
-        container.innerHTML = '';
-        return;
-    }
-
-    let html = '';
-
-    html += `<button class="page-btn" data-page="${current - 1}" ${current <= 1 ? 'disabled' : ''}>◀</button>`;
-
-    const pages = getPageRange(current, total);
-    pages.forEach(p => {
-        if (p === '...') {
-            html += `<span class="page-ellipsis">…</span>`;
-        } else {
-            html += `<button class="page-btn ${p === current ? 'active' : ''}" data-page="${p}">${p}</button>`;
-        }
-    });
-
-    html += `<button class="page-btn" data-page="${current + 1}" ${current >= total ? 'disabled' : ''}>▶</button>`;
-
-    container.innerHTML = html;
-
-    container.querySelectorAll('.page-btn:not([disabled])').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const page = parseInt(btn.dataset.page);
-            if (!isNaN(page) && page >= 1 && page <= total) {
-                goToPage(page);
-            }
-        });
-    });
+    // 分页已禁用，清空分页控件
+    container.innerHTML = '';
 }
 
 export function renderDeviceCount() {
