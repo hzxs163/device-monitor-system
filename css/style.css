@@ -1204,16 +1204,17 @@ body.login-page {
 
 
 /* ================================================================
-   设备类型分组容器
+   设备类型分组容器 - 单列版
    ================================================================ */
 
-/* 每个类型分组 */
+/* 每个类型分组 - 独占一行 */
 .type-group {
-    margin-bottom: 24px;
-    background: #f8fafc;
+    margin-bottom: 28px;
+    background: #ffffff;
     border-radius: 12px;
-    padding: 16px;
-    border: 1px solid #e9edf4;
+    padding: 16px 16px 4px 16px;
+    border: 1px solid #eef2f7;
+    width: 100%;
 }
 
 /* 分组标题栏 */
@@ -1221,11 +1222,11 @@ body.login-page {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 12px;
-    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 14px;
+    border-bottom: 2px solid #f1f4f9;
     margin-bottom: 16px;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
 }
 
 /* 类型名称 */
@@ -1239,12 +1240,12 @@ body.login-page {
 .type-group-stats {
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-size: 14px;
+    gap: 14px;
+    font-size: 13px;
 }
 
 .type-group-count {
-    color: #64748b;
+    color: #94a3b8;
 }
 
 .type-group-running {
@@ -1254,31 +1255,31 @@ body.login-page {
 
 .type-group-stopped {
     color: #94a3b8;
-    font-weight: 500;
+    font-weight: 400;
 }
 
-/* 组内卡片网格（复用设备卡片样式） */
+/* 组内卡片网格 - 始终多列 */
 .type-group-grid {
     display: grid;
-    gap: 12px;
+    gap: 14px;
     grid-template-columns: 1fr;
 }
 
-/* 响应式：平板 */
+/* 平板及以上：2列 */
 @media (min-width: 640px) {
     .type-group-grid {
         grid-template-columns: repeat(2, 1fr);
     }
 }
 
-/* 响应式：桌面 */
+/* 桌面：3列 */
 @media (min-width: 1024px) {
     .type-group-grid {
         grid-template-columns: repeat(3, 1fr);
     }
 }
 
-/* 响应式：大屏 */
+/* 大屏：4列 */
 @media (min-width: 1400px) {
     .type-group-grid {
         grid-template-columns: repeat(4, 1fr);
