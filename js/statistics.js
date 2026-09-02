@@ -55,6 +55,19 @@ export async function loadStatistics(year, month, silent = false) {
         // 保存到全局，供其他模块使用
         window.__statTotalHours = statisticsData.total_hours;
 
+        // ============================================================
+        // 新增：把月度运行时长合并到设备列表
+        // ============================================================
+        if (data.ranking && window.__devices) {
+            const rankingMap = {};
+            data.ranking.forEach(item => {
+                rankingMap[item.device_id] = item.hours || 0;
+            });
+            window.__devices.forEach(device => {
+                device.monthly_hours = rankingMap[device.id] || 0;
+            });
+        }
+
         // 更新统计栏
         updateStatsBar();
 
