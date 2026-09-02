@@ -2,7 +2,6 @@
  * ================================================================
  * 设备运行监控系统 - Pages Functions 全局中间件
  * 功能：JWT 验证、用户注入
- * 注意：此文件放在 functions/ 根目录，对所有 /api/* 请求生效
  * ================================================================
  */
 
@@ -14,21 +13,18 @@ import { unauthorized, error } from './utils/response.js';
 // ================================================================
 
 const PUBLIC_PATHS = [
-    '/api/auth/login',   // 登录接口
+    '/api/auth',   // ← 添加这一行，允许 POST /api/auth 登录
 ];
 
 // ================================================================
 // 中间件主函数
 // ================================================================
 
-/**
- * Pages Functions 中间件
- * 在每个请求处理前执行
- */
 export async function onRequest(context) {
     const { request, env, next } = context;
     const url = new URL(request.url);
     const path = url.pathname;
+    const method = request.method;
 
     // 1. 白名单：跳过验证
     if (PUBLIC_PATHS.includes(path)) {
@@ -42,7 +38,7 @@ export async function onRequest(context) {
         return unauthorized('请先登录');
     }
 
-    // 3. 将用户信息注入 context，供后续 API 使用
+    // 3. 将用户信息注入 context
     context.user = user;
 
     // 4. 继续执行后续处理
