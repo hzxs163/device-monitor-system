@@ -334,7 +334,13 @@
         // ============================================================
         function bindEvents() {
             // 退出登录
-            logoutBtn.addEventListener('click', () => {
+            logoutBtn.addEventListener('click', async () => {
+                // 调用后端登出接口，清除 cookie
+                try {
+                    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                } catch (e) {
+                    console.warn('登出请求失败:', e);
+                }
                 localStorage.removeItem('user');
                 window.location.href = '/login.html';
             });
