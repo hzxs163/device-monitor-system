@@ -26,13 +26,6 @@ let currentMonth = new Date().getMonth() + 1;
 // 1. 加载统计数据
 // ================================================================
 
-/**
- * 从服务器加载统计数据
- * @param {number} year - 年份
- * @param {number} month - 月份 (1-12)
- * @param {boolean} silent - 是否静默加载
- * @returns {Promise<object>}
- */
 export async function loadStatistics(year, month, silent = false) {
     year = year || currentYear;
     month = month || currentMonth;
@@ -67,6 +60,12 @@ export async function loadStatistics(year, month, silent = false) {
                 device.monthly_hours = rankingMap[device.id] || 0;
             });
             console.log('[Statistics] 月度时长合并完成:', window.__devices.length, '台设备');
+            
+            // 重新渲染设备卡片
+            import('/js/devices.js').then(module => {
+                module.renderDevices();
+            });
+            
         } else if (data.ranking && (!window.__devices || window.__devices.length === 0)) {
             console.warn('[Statistics] window.__devices 尚未加载，延迟合并');
             // 延迟重试
