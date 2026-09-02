@@ -22,7 +22,7 @@ export async function onRequestGet({ env }) {
     }
 }
 
-// POST /api/types - 添加类型（无权限检查）
+// POST /api/types - 添加类型
 export async function onRequestPost({ request, env }) {
     const body = await parseJSON(request);
     if (!body) {
@@ -66,9 +66,14 @@ export async function onRequestPost({ request, env }) {
     }
 }
 
-// DELETE /api/types/:id - 删除类型（无权限检查）
-export async function onRequestDelete({ env, params }) {
-    const typeId = parseInt(params.id);
+// DELETE /api/types/:id - 删除类型（从 URL 自己解析 ID）
+export async function onRequestDelete({ request, env }) {
+    // 从 URL 路径中解析 ID
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    const lastPart = pathParts[pathParts.length - 1];
+    const typeId = parseInt(lastPart);
+
     if (!typeId || isNaN(typeId)) {
         return error('无效的类型 ID', 400);
     }
@@ -99,16 +104,23 @@ export async function onRequestDelete({ env, params }) {
         return success({ id: typeId }, `类型已删除`);
     } catch (err) {
         console.error('[Types] 删除失败:', err);
-        return error('删除类型失败', 500);
+        return error('删除类型失败: ' + err.message, 500);
     }
 }
 
 // 路由分发
 export async function onRequest(context) {
-    const { request, params } = context;
+    const { request } = context;
     const method = request.method;
+    const url = new URL(request.url);
+    const path = url.pathname;
 
-    if (params && params.id) {
+    // 判断是否是 /api/types/:id 格式
+    const parts = path.split('/');
+    const lastPart = parts[parts.length - 1];
+    const isDetail = lastPart && !isNaN(lastPart);
+
+    if (isDetail) {
         if (method === 'DELETE') {
             return onRequestDelete(context);
         }
