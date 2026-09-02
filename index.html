@@ -299,6 +299,11 @@
             // 10. 加载操作记录
             await loadOperations();
 
+            // 11. 监听设备操作事件，自动刷新操作记录
+            window.addEventListener('deviceOperation', function() {
+                setTimeout(() => loadOperations(), 300);
+            });
+
             console.log('✅ 设备运行监控系统初始化完成');
         }
 
@@ -475,6 +480,9 @@
                 section.style.display = 'none';
             }
         }
+
+        // 暴露 loadOperations 到全局
+        window.loadOperations = loadOperations;
 
         // ============================================================
         // 模态框控制
