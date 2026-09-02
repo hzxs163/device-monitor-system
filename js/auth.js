@@ -16,14 +16,7 @@ let currentUserPromise = null;
 // 1. 登录
 // ================================================================
 
-/**
- * 用户登录
- * @param {string} username - 用户名（仅限字母、数字、下划线）
- * @param {string} password - 密码
- * @returns {Promise<{success: boolean, data?: object, error?: string}>}
- */
 export async function login(username, password) {
-    // 用户名格式校验
     if (!username || username.trim() === '') {
         return { success: false, error: '请输入用户名' };
     }
@@ -35,12 +28,12 @@ export async function login(username, password) {
     }
 
     try {
-        const response = await fetch('/api/auth/login', {
+        const response = await fetch('/api/auth', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            credentials: 'include', // 自动携带 cookie
+            credentials: 'include',
             body: JSON.stringify({
                 username: username.trim(),
                 password: password.trim(),
@@ -56,9 +49,10 @@ export async function login(username, password) {
             };
         }
 
-        // 登录成功，缓存用户信息
-        if (result.data && result.data.user) {
+        if (result.success && result.data && result.data.user) {
             currentUserCache = result.data.user;
+            // 保存到 localStorage
+            localStorage.setItem('user', JSON.stringify(result.data.user));
         }
 
         return {
@@ -78,10 +72,6 @@ export async function login(username, password) {
 // 2. 登出
 // ================================================================
 
-/**
- * 用户登出
- * @returns {Promise<{success: boolean}>}
- */
 export async function logout() {
     try {
         await fetch('/api/auth/logout', {
@@ -96,6 +86,9 @@ export async function logout() {
     currentUserCache = null;
     currentUserPromise = null;
 
+    // 清除 localStorage
+    localStorage.removeItem('user');
+
     return { success: true };
 }
 
@@ -103,18 +96,24 @@ export async function logout() {
 // 3. 获取当前用户信息
 // ================================================================
 
-/**
- * 获取当前登录用户信息
- * @param {boolean} force - 是否强制刷新（忽略缓存）
- * @returns {Promise<object|null>} 用户对象或 null（未登录）
- */
 export async function getCurrentUser(force = false) {
-    // 如果有缓存且不强制刷新，直接返回
     if (currentUserCache && !force) {
         return currentUserCache;
     }
 
-    // 防止并发重复请求
+    // 先从 localStorage 读取
+    const savedUser = localStorage.getItem('user');
+    if (savedUser && !force) {
+        try {
+            const user = JSON.parse(savedUser);
+            currentUserCache = user;
+            return user;
+        } catch (e) {
+            console.warn('[Auth] 解析 localStorage 用户信息失败:', e);
+            localStorage.removeItem('user');
+        }
+    }
+
     if (currentUserPromise) {
         return currentUserPromise;
     }
@@ -131,8 +130,8 @@ export async function getCurrentUser(force = false) {
 
             if (!response.ok) {
                 if (response.status === 401) {
-                    // 未登录或 token 过期
                     currentUserCache = null;
+                    localStorage.removeItem('user');
                     return null;
                 }
                 console.warn('[Auth] 获取用户信息失败:', response.status);
@@ -143,10 +142,12 @@ export async function getCurrentUser(force = false) {
 
             if (result.success && result.data) {
                 currentUserCache = result.data;
+                localStorage.setItem('user', JSON.stringify(result.data));
                 return currentUserCache;
             }
 
             currentUserCache = null;
+            localStorage.removeItem('user');
             return null;
         } catch (error) {
             console.error('[Auth] 获取用户信息异常:', error);
@@ -164,23 +165,16 @@ export async function getCurrentUser(force = false) {
 // 4. 检查登录状态（页面守卫）
 // ================================================================
 
-/**
- * 检查登录状态，未登录则跳转登录页
- * @param {string} redirectUrl - 未登录时跳转地址
- * @returns {Promise<object|null>} 用户对象或 null
- */
 export async function checkAuth(redirectUrl = '/login.html') {
     const user = await getCurrentUser();
 
     if (!user) {
-        // 未登录，跳转登录页
         if (window.location.pathname !== redirectUrl) {
             window.location.href = redirectUrl;
         }
         return null;
     }
 
-    // 已登录，检查是否在登录页（如果在则跳回首页）
     if (window.location.pathname === '/login.html') {
         window.location.href = '/index.html';
         return null;
@@ -193,36 +187,22 @@ export async function checkAuth(redirectUrl = '/login.html') {
 // 5. 工具函数
 // ================================================================
 
-/**
- * 判断当前用户是否为管理员
- * @returns {Promise<boolean>}
- */
 export async function isAdmin() {
     const user = await getCurrentUser();
     return user && user.role === 'admin';
 }
 
-/**
- * 判断当前用户是否已登录
- * @returns {Promise<boolean>}
- */
 export async function isLoggedIn() {
     const user = await getCurrentUser();
     return user !== null;
 }
 
-/**
- * 清除用户缓存（用于用户信息变更后刷新）
- */
 export function clearUserCache() {
     currentUserCache = null;
     currentUserPromise = null;
+    localStorage.removeItem('user');
 }
 
-/**
- * 刷新当前用户信息
- * @returns {Promise<object|null>}
- */
 export async function refreshUser() {
     clearUserCache();
     return getCurrentUser(true);
@@ -231,6 +211,7 @@ export async function refreshUser() {
 // ================================================================
 // 导出
 // ================================================================
+
 export default {
     login,
     logout,
