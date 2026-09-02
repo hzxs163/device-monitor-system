@@ -43,6 +43,7 @@ export async function loadDevices(silent = false) {
 
         allDevices = result.data?.devices || [];
         typeList = result.data?.types || [];
+        window.__devices = allDevices;  // ← 添加这行
         applyFilters();
         return allDevices;
     } catch (error) {
