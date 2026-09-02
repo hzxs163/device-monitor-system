@@ -265,8 +265,9 @@ export function renderDevices() {
     grid.innerHTML = html;
 
     // 绑定卡片点击事件（排除按钮点击）
+    // 绑定卡片双击事件（排除按钮点击）
     grid.querySelectorAll('.device-card').forEach(card => {
-        card.addEventListener('click', function(e) {
+        card.addEventListener('dblclick', function(e) {
             if (e.target.closest('.btn-start') || e.target.closest('.btn-stop')) {
                 return;
             }
