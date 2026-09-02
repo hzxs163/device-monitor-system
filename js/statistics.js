@@ -56,9 +56,9 @@ export async function loadStatistics(year, month, silent = false) {
         window.__statTotalHours = statisticsData.total_hours;
 
         // ============================================================
-        // 新增：把月度运行时长合并到设备列表
+        // 把月度运行时长合并到设备列表.
         // ============================================================
-        if (data.ranking && window.__devices) {
+        if (data.ranking && window.__devices && window.__devices.length > 0) {
             const rankingMap = {};
             data.ranking.forEach(item => {
                 rankingMap[item.device_id] = item.hours || 0;
@@ -66,6 +66,26 @@ export async function loadStatistics(year, month, silent = false) {
             window.__devices.forEach(device => {
                 device.monthly_hours = rankingMap[device.id] || 0;
             });
+            console.log('[Statistics] 月度时长合并完成:', window.__devices.length, '台设备');
+        } else if (data.ranking && (!window.__devices || window.__devices.length === 0)) {
+            console.warn('[Statistics] window.__devices 尚未加载，延迟合并');
+            // 延迟重试
+            setTimeout(() => {
+                if (window.__devices && window.__devices.length > 0) {
+                    const rankingMap = {};
+                    data.ranking.forEach(item => {
+                        rankingMap[item.device_id] = item.hours || 0;
+                    });
+                    window.__devices.forEach(device => {
+                        device.monthly_hours = rankingMap[device.id] || 0;
+                    });
+                    console.log('[Statistics] 延迟合并完成');
+                    // 重新渲染设备卡片
+                    import('/js/devices.js').then(module => {
+                        module.renderDevices();
+                    });
+                }
+            }, 500);
         }
 
         // 更新统计栏
