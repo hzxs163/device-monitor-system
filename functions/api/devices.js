@@ -5,17 +5,13 @@
  * ================================================================
  */
 
-import { success, error, unauthorized, forbidden, parseJSON } from '../utils/response.js';
+import { success, error, parseJSON } from '../utils/response.js';
 
 // ================================================================
 // 1. GET /api/devices - 获取设备列表
 // ================================================================
 
-export async function onRequestGet({ env, user }) {
-    if (!user) {
-        return unauthorized('请先登录');
-    }
-
+export async function onRequestGet({ env }) {
     try {
         // 查询所有未删除的设备
         const stmt = env.DB.prepare(`
@@ -56,17 +52,10 @@ export async function onRequestGet({ env, user }) {
 }
 
 // ================================================================
-// 2. POST /api/devices - 添加设备（仅管理员）
+// 2. POST /api/devices - 添加设备
 // ================================================================
 
-export async function onRequestPost({ request, env, user }) {
-    if (!user) {
-        return unauthorized('请先登录');
-    }
-    if (user.role !== 'admin') {
-        return forbidden('需要管理员权限');
-    }
-
+export async function onRequestPost({ request, env }) {
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
@@ -100,11 +89,11 @@ export async function onRequestPost({ request, env, user }) {
 
         // 插入设备
         const insertStmt = env.DB.prepare(`
-            INSERT INTO devices (name, tag, type_id, location, created_by)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO devices (name, tag, type_id, location)
+            VALUES (?, ?, ?, ?)
         `);
         const result = await insertStmt
-            .bind(name.trim(), tag.trim(), typeId, location?.trim() || null, user.id)
+            .bind(name.trim(), tag.trim(), typeId, location?.trim() || null)
             .run();
 
         return success({
@@ -121,17 +110,10 @@ export async function onRequestPost({ request, env, user }) {
 }
 
 // ================================================================
-// 3. PUT /api/devices/:id - 编辑设备（仅管理员）
+// 3. PUT /api/devices/:id - 编辑设备
 // ================================================================
 
-export async function onRequestPut({ request, env, user, params }) {
-    if (!user) {
-        return unauthorized('请先登录');
-    }
-    if (user.role !== 'admin') {
-        return forbidden('需要管理员权限');
-    }
-
+export async function onRequestPut({ request, env, params }) {
     const deviceId = parseInt(params.id);
     if (!deviceId || isNaN(deviceId)) {
         return error('无效的设备 ID', 400);
@@ -195,17 +177,10 @@ export async function onRequestPut({ request, env, user, params }) {
 }
 
 // ================================================================
-// 4. DELETE /api/devices/:id - 删除设备（软删除，仅管理员）
+// 4. DELETE /api/devices/:id - 删除设备（软删除）
 // ================================================================
 
-export async function onRequestDelete({ env, user, params }) {
-    if (!user) {
-        return unauthorized('请先登录');
-    }
-    if (user.role !== 'admin') {
-        return forbidden('需要管理员权限');
-    }
-
+export async function onRequestDelete({ env, params }) {
     const deviceId = parseInt(params.id);
     if (!deviceId || isNaN(deviceId)) {
         return error('无效的设备 ID', 400);
