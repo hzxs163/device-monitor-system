@@ -1,413 +1,347 @@
 /**
  * ================================================================
- * 设备运行监控系统 - 前端设备管理模块
- * 功能：加载设备、渲染卡片、类型标签、搜索、分页
+ * 设备运行监控系统 - 前端统计报表模块
+ * 功能：月统计、类型汇总、排行、导出
  * ================================================================
  */
 
-import { get, showToast, formatDuration, DEFAULT_PAGE_SIZE } from './utils.js';
+import { get, showToast, formatHours, exportMonthlyReport } from './utils.js';
+import { allDevices } from './devices.js';
 
 // ================================================================
 // 状态
 // ================================================================
 
-let allDevices = [];
-let filteredDevices = [];
-let currentType = 'all';
-let searchKeyword = '';
-let currentPage = 1;
-let typeList = [];
-let selectedDeviceId = null;
-let onDeviceChange = null;
+// 统计数据缓存
+let statisticsData = {
+    summary: [],      // 类型汇总 [{ type, total_hours }]
+    ranking: [],      // 设备排行 [{ device_id, name, tag, type, hours, status }]
+    total_hours: 0,   // 总运行小时
+};
 
-// 每页数量
-const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-const pageSize = DEFAULT_PAGE_SIZE;
+let currentYear = new Date().getFullYear();
+let currentMonth = new Date().getMonth() + 1;
 
 // ================================================================
-// 1. 加载设备列表
+// 1. 加载统计数据
 // ================================================================
 
-export async function loadDevices(silent = false) {
+/**
+ * 从服务器加载统计数据
+ * @param {number} year - 年份
+ * @param {number} month - 月份 (1-12)
+ * @param {boolean} silent - 是否静默加载
+ * @returns {Promise<object>}
+ */
+export async function loadStatistics(year, month, silent = false) {
+    year = year || currentYear;
+    month = month || currentMonth;
+
     try {
-        const result = await get('/devices');
+        const result = await get(`/statistics/monthly?year=${year}&month=${month}`);
 
         if (!result.success) {
             if (!silent) {
-                showToast(result.error || '加载设备列表失败', 'error');
+                showToast(result.error || '加载统计数据失败', 'error');
             }
-            allDevices = [];
-            filteredDevices = [];
-            window.__devices = [];
-            window.__allTypes = [];
-            return [];
+            return statisticsData;
         }
 
-        allDevices = result.data?.devices || [];
-        typeList = result.data?.types || [];
-        window.__devices = allDevices;
-        window.__allTypes = typeList;
-        applyFilters();
-        return allDevices;
+        const data = result.data || {};
+        statisticsData.summary = data.summary || [];
+        statisticsData.ranking = data.ranking || [];
+        statisticsData.total_hours = data.total_hours || 0;
+
+        // 保存到全局，供其他模块使用
+        window.__statTotalHours = statisticsData.total_hours;
+
+        // ============================================================
+        // 把月度运行时长合并到设备列表
+        // ============================================================
+        if (data.ranking) {
+            const rankingMap = {};
+            data.ranking.forEach(item => {
+                rankingMap[item.device_id] = item.hours || 0;
+            });
+
+            // 更新 window.__devices
+            if (window.__devices && window.__devices.length > 0) {
+                window.__devices.forEach(device => {
+                    device.monthly_hours = rankingMap[device.id] || 0;
+                });
+                console.log('[Statistics] window.__devices 合并完成:', window.__devices.length, '台设备');
+            }
+
+            // 同时更新 allDevices（用于 filteredDevices）
+            if (allDevices && allDevices.length > 0) {
+                allDevices.forEach(device => {
+                    device.monthly_hours = rankingMap[device.id] || 0;
+                });
+                console.log('[Statistics] allDevices 合并完成:', allDevices.length, '台设备');
+            }
+
+            // 如果都没有，延迟重试
+            if ((!window.__devices || window.__devices.length === 0) && (!allDevices || allDevices.length === 0)) {
+                console.warn('[Statistics] 设备列表未加载，延迟合并');
+                setTimeout(() => {
+                    const rankingMapRetry = {};
+                    data.ranking.forEach(item => {
+                        rankingMapRetry[item.device_id] = item.hours || 0;
+                    });
+                    if (window.__devices && window.__devices.length > 0) {
+                        window.__devices.forEach(device => {
+                            device.monthly_hours = rankingMapRetry[device.id] || 0;
+                        });
+                    }
+                    if (allDevices && allDevices.length > 0) {
+                        allDevices.forEach(device => {
+                            device.monthly_hours = rankingMapRetry[device.id] || 0;
+                        });
+                    }
+                    console.log('[Statistics] 延迟合并完成');
+                    import('/js/devices.js').then(module => {
+                        module.renderDevices();
+                    });
+                }, 500);
+            }
+        }
+
+        // 更新统计栏
+        updateStatsBar();
+
+        return statisticsData;
     } catch (error) {
-        console.error('[Devices] 加载失败:', error);
+        console.error('[Statistics] 加载失败:', error);
         if (!silent) {
-            showToast('加载设备列表异常', 'error');
+            showToast('加载统计数据异常', 'error');
         }
-        allDevices = [];
-        filteredDevices = [];
-        window.__devices = [];
-        window.__allTypes = [];
-        return [];
+        return statisticsData;
     }
 }
 
-export async function reloadDevices() {
-    return loadDevices(false);
+// 明确导出 loadStatistics
+export { loadStatistics };
+
+/**
+ * 重新加载统计数据（强制刷新）
+ */
+export async function reloadStatistics() {
+    return loadStatistics(currentYear, currentMonth, false);
 }
 
 // ================================================================
-// 2. 筛选逻辑
+// 2. 更新统计栏
 // ================================================================
 
-function applyFilters() {
-    let list = [...allDevices];
+/**
+ * 更新顶部统计栏
+ */
+function updateStatsBar() {
+    const totalHoursEl = document.getElementById('totalHours');
+    const runningCountEl = document.getElementById('runningCount');
 
-    if (currentType !== 'all') {
-        list = list.filter(d => d.type === currentType);
+    if (totalHoursEl) {
+        totalHoursEl.textContent = `${statisticsData.total_hours || 0} 小时`;
     }
 
-    if (searchKeyword.trim()) {
-        const keyword = searchKeyword.trim().toLowerCase();
-        list = list.filter(d =>
-            d.name.toLowerCase().includes(keyword) ||
-            (d.tag && d.tag.toLowerCase().includes(keyword))
-        );
-    }
-
-    list.sort((a, b) => {
-        if (a.status === 1 && b.status !== 1) return -1;
-        if (a.status !== 1 && b.status === 1) return 1;
-        return a.name.localeCompare(b.name);
-    });
-
-    filteredDevices = list;
-
-    const totalPages = getTotalPages();
-    if (currentPage > totalPages && totalPages > 0) {
-        currentPage = totalPages;
-    } else if (totalPages === 0) {
-        currentPage = 1;
+    if (runningCountEl) {
+        const running = allDevices?.filter(d => d.status === 1 && !d.is_deleted).length || 0;
+        runningCountEl.textContent = `${running} 台`;
     }
 }
 
-export function switchType(type) {
-    if (currentType === type) return;
-    currentType = type;
-    currentPage = 1;
-    applyFilters();
-    renderAll();
-    renderTypeTabs();
-}
-
-export function filterDevices(keyword) {
-    searchKeyword = keyword || '';
-    currentPage = 1;
-    applyFilters();
-    renderAll();
-}
-
 // ================================================================
-// 3. 分页
+// 3. 渲染类型汇总卡片
 // ================================================================
 
-export function getTotalPages() {
-    return 1;
-}
+/**
+ * 渲染类型汇总
+ */
+export function renderTypeSummary() {
+    const container = document.getElementById('typeSummary');
+    if (!container) return;
 
-export function getCurrentPageDevices() {
-    // 直接从 window.__devices 获取，确保数据最新
-    const devices = window.__devices || [];
-    let list = [...devices];
-    
-    // 按类型筛选
-    if (currentType !== 'all') {
-        list = list.filter(d => d.type === currentType);
-    }
-    
-    // 按搜索关键词筛选
-    if (searchKeyword.trim()) {
-        const keyword = searchKeyword.trim().toLowerCase();
-        list = list.filter(d =>
-            d.name.toLowerCase().includes(keyword) ||
-            (d.tag && d.tag.toLowerCase().includes(keyword))
-        );
-    }
-    
-    // 按状态排序（运行中排前面）
-    list.sort((a, b) => {
-        if (a.status === 1 && b.status !== 1) return -1;
-        if (a.status !== 1 && b.status === 1) return 1;
-        return a.name.localeCompare(b.name);
-    });
-    
-    return list;
-}
+    const summary = statisticsData.summary || [];
 
-export function goToPage(page) {
-    return;
-}
-
-// ================================================================
-// 4. 渲染函数
-// ================================================================
-
-export function renderAll() {
-    renderDeviceCount();
-    renderDevices();
-    renderPagination();
-}
-
-export function renderDevices() {
-    const grid = document.getElementById('deviceGrid');
-    if (!grid) return;
-
-    const devices = getCurrentPageDevices();
-
-    if (devices.length === 0) {
-        grid.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon">📭</div>
-                <p class="empty-text">暂无设备</p>
-                <p class="empty-hint">请添加设备或调整筛选条件</p>
+    if (summary.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state small">
+                <p class="empty-text">暂无运行数据</p>
             </div>
         `;
         return;
     }
 
-    // 按类型分组
-    const grouped = {};
-    devices.forEach(device => {
-        const type = device.type || '未分类';
-        if (!grouped[type]) {
-            grouped[type] = [];
-        }
-        grouped[type].push(device);
-    });
+    // 找出最大值用于进度条
+    const maxHours = Math.max(...summary.map(item => item.total_hours || 0), 1);
 
-    // ============================================================
-    // 按 sort_order 排序
-    // ============================================================
-    let sortedTypes = [];
-    
-    if (window.__allTypes && window.__allTypes.length > 0) {
-        const typeOrderMap = {};
-        window.__allTypes.forEach((t, index) => {
-            typeOrderMap[t.name] = t.sort_order !== undefined ? t.sort_order : index;
-        });
-        sortedTypes = Object.keys(grouped).sort((a, b) => {
-            const orderA = typeOrderMap[a] !== undefined ? typeOrderMap[a] : 999;
-            const orderB = typeOrderMap[b] !== undefined ? typeOrderMap[b] : 999;
-            return orderA - orderB;
-        });
-    } else {
-        sortedTypes = Object.keys(grouped).sort();
-    }
+    container.innerHTML = summary.map(item => {
+        const hours = item.total_hours || 0;
+        const percent = maxHours > 0 ? (hours / maxHours) * 100 : 0;
+        const isHighlight = hours === maxHours && hours > 0;
 
-    let html = '';
-
-    sortedTypes.forEach(type => {
-        const typeDevices = grouped[type];
-        const total = typeDevices.length;
-        const running = typeDevices.filter(d => d.status === 1).length;
-        const stopped = total - running;
-        const groupId = 'group-' + type.replace(/\s/g, '-') + '-' + Date.now();
-
-        html += `
-            <div class="type-group" data-group="${groupId}">
-                <div class="type-group-header" onclick="window.toggleGroup('${groupId}')" style="cursor:pointer;">
-                    <span class="type-group-name" id="${groupId}-arrow">▼ ${escapeHtml(type)}</span>
-                    <span class="type-group-stats">
-                        <span class="type-group-count">共 ${total} 台</span>
-                        <span class="type-group-running">● ${running} 台开机</span>
-                        <span class="type-group-stopped">○ ${stopped} 台停机</span>
-                    </span>
-                </div>
-                <div class="type-group-grid" id="${groupId}-content">
-        `;
-
-        typeDevices.forEach(device => {
-            const isRunning = device.status === 1;
-            const statusText = isRunning ? '运行中' : '已停机';
-            const statusClass = isRunning ? 'running' : 'stopped';
-
-            const currentDuration = isRunning && device.current_start_time
-                ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
-                : '--';
-
-            const monthlyHours = device.monthly_hours || 0;
-            const monthlyText = monthlyHours > 0 ? `${monthlyHours}小时` : '0小时';
-
-            const actionBtn = isRunning
-                ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
-                : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
-
-            html += `
-                <div class="device-card ${statusClass}" data-id="${device.id}" style="cursor:pointer;">
-                    <div class="card-row">
-                        <span class="device-name">${escapeHtml(device.name)}</span>
-                        <span class="device-status">
-                            <span class="status-dot ${statusClass}"></span>
-                            ${statusText}
-                        </span>
-                    </div>
-                    <div class="card-row">
-                        <span class="device-tag">位号: ${escapeHtml(device.tag || '-')}</span>
-                        <span class="device-type">${escapeHtml(device.type || '未分类')}</span>
-                    </div>
-                    <div class="card-row">
-                        <span class="device-tag">型号: ${escapeHtml(device.model || '-')}</span>
-                    </div>
-                    <div class="card-row">
-                        <span class="device-duration" style="display:flex;justify-content:space-between;font-size:var(--text-sm);gap:12px;">
-                            <span>本月运行: ${monthlyText}</span>
-                            <span>本次运行: ${currentDuration}</span>
-                        </span>
-                    </div>
-                    <div class="card-actions">
-                        ${actionBtn}
-                    </div>
-                </div>
-            `;
-        });
-
-        html += `
+        return `
+            <div class="type-summary-item ${isHighlight ? 'highlight' : ''}">
+                <div class="type-name">${escapeHtml(item.type)}</div>
+                <div class="type-hours">${hours} 小时</div>
+                <div class="type-bar">
+                    <div class="type-bar-fill" style="width: ${percent}%"></div>
                 </div>
             </div>
         `;
-    });
-
-    grid.innerHTML = html;
-
-    // 绑定卡片双击事件（排除按钮点击）
-    grid.querySelectorAll('.device-card').forEach(card => {
-        card.addEventListener('dblclick', function(e) {
-            if (e.target.closest('.btn-start') || e.target.closest('.btn-stop')) {
-                return;
-            }
-            const deviceId = parseInt(this.dataset.id);
-            if (typeof window.showDeviceDetail === 'function') {
-                window.showDeviceDetail(deviceId);
-            }
-        });
-    });
-
-    // 绑定卡片按钮事件
-    grid.querySelectorAll('[data-action]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const deviceId = parseInt(btn.dataset.id);
-            const action = btn.dataset.action;
-            if (action === 'start') {
-                handleStart(deviceId);
-            } else if (action === 'stop') {
-                handleStop(deviceId);
-            }
-        });
-    });
+    }).join('');
 }
 
-export function renderTypeTabs() {
-    const container = document.getElementById('typeTabs');
+// ================================================================
+// 4. 渲染设备排行表格
+// ================================================================
+
+/**
+ * 渲染设备排行表格
+ */
+export function renderRankTable() {
+    const container = document.getElementById('rankTable');
     if (!container) return;
 
-    const types = getAllTypes();
+    const ranking = statisticsData.ranking || [];
+
+    if (ranking.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state small">
+                <p class="empty-text">暂无运行数据</p>
+                <p class="empty-hint">本月还没有设备运行记录</p>
+            </div>
+        `;
+        return;
+    }
+
+    // 只显示前 20 名
+    const topList = ranking.slice(0, 20);
 
     let html = `
-        <button class="type-tab ${currentType === 'all' ? 'active' : ''}" data-type="all">
-            全部 <span class="badge">${allDevices.filter(d => !d.is_deleted).length}</span>
-        </button>
+        <table class="rank-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>设备名称</th>
+                    <th>位号</th>
+                    <th>类型</th>
+                    <th>本月运行</th>
+                    <th>状态</th>
+                </tr>
+            </thead>
+            <tbody>
     `;
 
-    types.forEach(type => {
-        const count = allDevices.filter(d => d.type === type && !d.is_deleted).length;
-        const isActive = currentType === type;
+    topList.forEach((item, index) => {
+        const rank = index + 1;
+        let rankClass = '';
+        let rankDisplay = rank;
+
+        if (rank === 1) {
+            rankClass = 'gold';
+            rankDisplay = '🥇';
+        } else if (rank === 2) {
+            rankClass = 'silver';
+            rankDisplay = '🥈';
+        } else if (rank === 3) {
+            rankClass = 'bronze';
+            rankDisplay = '🥉';
+        }
+
+        const statusClass = item.status === 1 ? 'running' : 'stopped';
+        const statusText = item.status === 1 ? '🟢 运行中' : '⚪ 已停机';
+        const hours = item.hours || 0;
+
         html += `
-            <button class="type-tab ${isActive ? 'active' : ''}" data-type="${escapeHtml(type)}">
-                ${escapeHtml(type)} <span class="badge">${count}</span>
-            </button>
+            <tr>
+                <td><span class="rank-medal ${rankClass}">${rankDisplay}</span></td>
+                <td><strong>${escapeHtml(item.name)}</strong></td>
+                <td>${escapeHtml(item.tag || '-')}</td>
+                <td>${escapeHtml(item.type || '-')}</td>
+                <td><strong>${hours} 小时</strong></td>
+                <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+            </tr>
         `;
     });
 
+    html += `
+            </tbody>
+        </table>
+    `;
+
+    // 如果有更多设备，显示提示
+    if (ranking.length > 20) {
+        html += `<p class="text-muted text-center" style="margin-top:12px;font-size:14px;">仅显示前 20 名，共 ${ranking.length} 台设备</p>`;
+    }
+
     container.innerHTML = html;
-
-    container.querySelectorAll('.type-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            const type = tab.dataset.type;
-            switchType(type);
-        });
-    });
-}
-
-export function renderPagination() {
-    const container = document.getElementById('pagination');
-    if (!container) return;
-    container.innerHTML = '';
-}
-
-export function renderDeviceCount() {
-    const el = document.getElementById('deviceCount');
-    if (el) {
-        const total = allDevices.filter(d => !d.is_deleted).length;
-        const filtered = filteredDevices.length;
-        el.textContent = filtered === total ? `共 ${total} 台` : `共 ${filtered} / ${total} 台`;
-    }
 }
 
 // ================================================================
-// 5. 辅助函数
+// 5. 导出报表
 // ================================================================
 
-function getAllTypes() {
-    const types = new Set();
-    allDevices.forEach(d => {
-        if (d.type && !d.is_deleted) {
-            types.add(d.type);
-        }
-    });
-    return Array.from(types).sort();
+/**
+ * 导出月报 Excel
+ */
+export function exportReport() {
+    const ranking = statisticsData.ranking || [];
+
+    if (ranking.length === 0) {
+        showToast('没有数据可导出', 'warning');
+        return;
+    }
+
+    const monthLabel = `${currentYear}年${currentMonth}月`;
+    // 转换数据格式
+    const data = ranking.map((item, index) => ({
+        rank: index + 1,
+        name: item.name,
+        tag: item.tag || '-',
+        typeName: item.type || '-',
+        hours: item.hours || 0,
+        statusText: item.status === 1 ? '运行中' : '已停机',
+    }));
+
+    exportMonthlyReport(data, monthLabel);
 }
 
-function getPageRange(current, total) {
-    const range = [];
-    const show = 5;
+// ================================================================
+// 6. 切换月份
+// ================================================================
 
-    if (total <= show) {
-        for (let i = 1; i <= total; i++) range.push(i);
-        return range;
+/**
+ * 切换到指定月份
+ * @param {number} year - 年份
+ * @param {number} month - 月份 (1-12)
+ */
+export async function switchMonth(year, month) {
+    currentYear = year;
+    currentMonth = month;
+
+    // 更新月份显示
+    const monthEl = document.getElementById('currentMonth');
+    if (monthEl) {
+        monthEl.textContent = `${year}年${month}月`;
     }
 
-    range.push(1);
+    // 重新加载数据
+    await loadStatistics(year, month, false);
+    renderTypeSummary();
+    renderRankTable();
+    updateStatsBar();
 
-    let start = Math.max(2, current - 1);
-    let end = Math.min(total - 1, current + 1);
-
-    if (current <= 3) {
-        end = Math.min(total - 1, 4);
-    }
-    if (current >= total - 2) {
-        start = Math.max(2, total - 3);
-    }
-
-    if (start > 2) range.push('...');
-    for (let i = start; i <= end; i++) range.push(i);
-    if (end < total - 1) range.push('...');
-
-    if (total > 1) range.push(total);
-
-    return range;
+    showToast(`已切换到 ${year}年${month}月`, 'info');
 }
 
+// ================================================================
+// 7. 工具函数
+// ================================================================
+
+/**
+ * HTML 转义
+ */
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -416,72 +350,24 @@ function escapeHtml(text) {
 }
 
 // ================================================================
-// 6. 操作处理（开机/停机）
-// ================================================================
-
-async function handleStart(deviceId) {
-    const { startDevice } = await import('./operations.js');
-    await startDevice(deviceId);
-}
-
-async function handleStop(deviceId) {
-    const { stopDevice } = await import('./operations.js');
-    await stopDevice(deviceId);
-}
-
-// ================================================================
-// 7. 设备状态更新
-// ================================================================
-
-export function updateDeviceLocal(deviceId, updates) {
-    const device = allDevices.find(d => d.id === deviceId);
-    if (device) {
-        Object.assign(device, updates);
-        applyFilters();
-        renderAll();
-        if (onDeviceChange) {
-            onDeviceChange();
-        }
-    }
-}
-
-export function onDeviceChangeCallback(callback) {
-    onDeviceChange = callback;
-}
-
-// ================================================================
 // 8. 导出
 // ================================================================
 
 export {
-    allDevices,
-    filteredDevices,
-    currentType,
-    currentPage,
-    pageSize,
-    searchKeyword,
-    typeList,
+    statisticsData,
+    currentYear,
+    currentMonth,
+    loadStatistics,
 };
 
 export default {
-    loadDevices,
-    reloadDevices,
-    switchType,
-    filterDevices,
-    renderAll,
-    renderDevices,
-    renderTypeTabs,
-    renderPagination,
-    renderDeviceCount,
-    getCurrentPageDevices,
-    getTotalPages,
-    goToPage,
-    updateDeviceLocal,
-    onDeviceChangeCallback,
-    allDevices,
-    filteredDevices,
-    currentType,
-    currentPage,
-    searchKeyword,
-    typeList,
+    loadStatistics,
+    reloadStatistics,
+    renderTypeSummary,
+    renderRankTable,
+    exportReport,
+    switchMonth,
+    statisticsData,
+    currentYear,
+    currentMonth,
 };
