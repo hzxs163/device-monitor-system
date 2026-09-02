@@ -228,7 +228,7 @@ export function renderDevices() {
                 : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
 
             html += `
-                <div class="device-card ${statusClass}" data-id="${device.id}" onclick="window.showDeviceDetail(${device.id})" style="cursor:pointer;">
+                <div class="device-card ${statusClass}" data-id="${device.id}" style="cursor:pointer;">
                     <div class="card-row">
                         <span class="device-name">${escapeHtml(device.name)}</span>
                         <span class="device-status">
