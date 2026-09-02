@@ -66,6 +66,75 @@ export async function onRequestPost({ request, env }) {
     }
 }
 
+// PUT /api/types/order - 更新类型顺序
+export async function onRequestPutOrder({ request, env }) {
+    const body = await parseJSON(request);
+    if (!body) {
+        return error('无效的请求数据', 400);
+    }
+
+    const { ids } = body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return error('无效的类型顺序数据', 400);
+    }
+
+    try {
+        for (let i = 0; i < ids.length; i++) {
+            const updateStmt = env.DB.prepare(`
+                UPDATE device_types SET sort_order = ? WHERE id = ?
+            `);
+            await updateStmt.bind(i, ids[i]).run();
+        }
+        return success({ message: `已更新 ${ids.length} 个类型的顺序` });
+    } catch (err) {
+        console.error('[Types] 更新顺序失败:', err);
+        return error('更新顺序失败: ' + err.message, 500);
+    }
+}
+
+// PUT /api/types/:id - 修改类型名称
+export async function onRequestPut({ request, env }) {
+    // 从 URL 路径中解析 ID
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    const lastPart = pathParts[pathParts.length - 1];
+    const typeId = parseInt(lastPart);
+
+    if (!typeId || isNaN(typeId)) {
+        return error('无效的类型 ID', 400);
+    }
+
+    const body = await parseJSON(request);
+    if (!body) {
+        return error('无效的请求数据', 400);
+    }
+
+    const { name } = body;
+    if (!name || name.trim() === '') {
+        return error('类型名称不能为空', 400);
+    }
+
+    try {
+        const checkStmt = env.DB.prepare(`
+            SELECT id FROM device_types WHERE name = ? AND id != ?
+        `);
+        const existing = await checkStmt.bind(name.trim(), typeId).first();
+        if (existing) {
+            return error('类型名称已存在', 400);
+        }
+
+        const updateStmt = env.DB.prepare(`
+            UPDATE device_types SET name = ? WHERE id = ?
+        `);
+        await updateStmt.bind(name.trim(), typeId).run();
+
+        return success({ id: typeId, name: name.trim() }, '类型已更新');
+    } catch (err) {
+        console.error('[Types] 修改失败:', err);
+        return error('修改类型失败: ' + err.message, 500);
+    }
+}
+
 // DELETE /api/types/:id - 删除类型（从 URL 自己解析 ID）
 export async function onRequestDelete({ request, env }) {
     // 从 URL 路径中解析 ID
@@ -115,6 +184,14 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // PUT /api/types/order
+    if (path === '/api/types/order') {
+        if (method === 'PUT') {
+            return onRequestPutOrder(context);
+        }
+        return error('方法不允许', 405);
+    }
+
     // 判断是否是 /api/types/:id 格式
     const parts = path.split('/');
     const lastPart = parts[parts.length - 1];
@@ -123,6 +200,9 @@ export async function onRequest(context) {
     if (isDetail) {
         if (method === 'DELETE') {
             return onRequestDelete(context);
+        }
+        if (method === 'PUT') {
+            return onRequestPut(context);
         }
         return error('方法不允许', 405);
     }
