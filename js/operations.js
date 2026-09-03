@@ -6,7 +6,7 @@
  */
 
 import { post, showToast } from './utils.js';
-import { loadDevices, renderAll, updateDeviceLocal } from './devices.js';
+import { updateDeviceLocal } from './devices.js';
 
 // ================================================================
 // 状态
@@ -14,6 +14,16 @@ import { loadDevices, renderAll, updateDeviceLocal } from './devices.js';
 
 // 正在操作的设备 ID 集合（防止重复点击）
 const operatingSet = new Set();
+
+// 只更新统计栏，不刷新整个页面
+function updateStatsBarOnly() {
+    const devices = window.__devices || [];
+    const running = devices.filter(d => d.status === 1 && !d.is_deleted).length;
+    const runningCountEl = document.getElementById('runningCount');
+    if (runningCountEl) {
+        runningCountEl.textContent = `${running} 台`;
+    }
+}
 
 // ================================================================
 // 1. 开机
@@ -62,6 +72,9 @@ export async function startDevice(deviceId) {
         if (typeof window.dispatchEvent === 'function') {
             window.dispatchEvent(new Event('deviceOperation'));
         }
+
+        // 更新统计栏（只更新运行台数）
+        updateStatsBarOnly();
 
         return { success: true };
     } catch (error) {
@@ -125,6 +138,9 @@ export async function stopDevice(deviceId) {
             window.dispatchEvent(new Event('deviceOperation'));
         }
 
+        // 更新统计栏（只更新运行台数）
+        updateStatsBarOnly();
+
         return { success: true };
     } catch (error) {
         console.error('[Operations] 停机失败:', error);
@@ -143,6 +159,7 @@ export async function stopDevice(deviceId) {
  * 操作后刷新设备列表和统计
  */
 export async function refreshAfterOperation() {
+    const { loadDevices, renderAll } = await import('./devices.js');
     await loadDevices(true);
     renderAll();
 
