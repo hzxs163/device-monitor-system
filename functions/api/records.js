@@ -48,7 +48,7 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
         const now = new Date();
         const timeStr = now.toLocaleString('zh-CN', { hour12: false });
 
-        const actionText = action === 'start' ? '开机 ✅' : '停机 ⏹️';
+        const actionText = action === 'start' ? '🟢 开机' : '🔴 停机';
         const durationText = duration !== null ? `，运行 ${formatDuration(duration)}` : '';
 
         // 1. 摘要（就是通知栏显示的标题）
