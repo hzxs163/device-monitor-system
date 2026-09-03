@@ -8,13 +8,17 @@
 import { success, error, parseJSON } from '../utils/response.js';
 
 // ================================================================
-// 1. GET /api/devices - 获取设备列表
+// 1. GET /api/devices - 获取设备列表（支持区域过滤）
 // ================================================================
 
-export async function onRequestGet({ env }) {
+export async function onRequestGet({ request, env }) {
     try {
-        // 查询所有未删除的设备（包含 params 字段）
-        const stmt = env.DB.prepare(`
+        const url = new URL(request.url);
+        const regionId = url.searchParams.get('regionId');
+        const userId = url.searchParams.get('userId');
+
+        // 构建查询
+        let sql = `
             SELECT
                 d.id,
                 d.name,
@@ -27,13 +31,48 @@ export async function onRequestGet({ env }) {
                 d.current_start_time,
                 d.is_deleted,
                 d.params,
-                d.created_at
+                d.created_at,
+                d.region_id,
+                r.name as region_name
             FROM devices d
             LEFT JOIN device_types dt ON d.type_id = dt.id
+            LEFT JOIN regions r ON d.region_id = r.id
             WHERE d.is_deleted = 0
-            ORDER BY d.status DESC, d.id ASC
-        `);
-        const devices = await stmt.all();
+        `;
+        const bindParams = [];
+
+        // 区域过滤逻辑
+        if (userId) {
+            // 获取用户信息
+            const userStmt = env.DB.prepare(`
+                SELECT role, region_id FROM users WHERE id = ?
+            `);
+            const user = await userStmt.bind(userId).first();
+
+            if (user) {
+                if (user.role === 'admin') {
+                    // 管理员：如果有 regionId 参数则过滤
+                    if (regionId && regionId !== 'all' && regionId !== '') {
+                        sql += ` AND d.region_id = ?`;
+                        bindParams.push(parseInt(regionId));
+                    }
+                    // 否则显示全部
+                } else {
+                    // 普通用户：只能看自己区域的设备
+                    sql += ` AND d.region_id = ?`;
+                    bindParams.push(user.region_id);
+                }
+            }
+        } else if (regionId && regionId !== 'all' && regionId !== '') {
+            // 无 userId 时，按 regionId 过滤（兼容旧逻辑）
+            sql += ` AND d.region_id = ?`;
+            bindParams.push(parseInt(regionId));
+        }
+
+        sql += ` ORDER BY d.status DESC, d.id ASC`;
+
+        const stmt = env.DB.prepare(sql);
+        const devices = await stmt.bind(...bindParams).all();
 
         // 查询所有类型
         const typeStmt = env.DB.prepare(`
@@ -43,9 +82,18 @@ export async function onRequestGet({ env }) {
         `);
         const types = await typeStmt.all();
 
+        // 查询所有区域（用于前端下拉）
+        const regionStmt = env.DB.prepare(`
+            SELECT id, name, sort_order
+            FROM regions
+            ORDER BY sort_order ASC, id ASC
+        `);
+        const regions = await regionStmt.all();
+
         return success({
             devices: devices.results || [],
             types: types.results || [],
+            regions: regions.results || [],
         });
     } catch (err) {
         console.error('[Devices] 查询失败:', err);
@@ -54,7 +102,7 @@ export async function onRequestGet({ env }) {
 }
 
 // ================================================================
-// 2. POST /api/devices - 添加设备
+// 2. POST /api/devices - 添加设备（支持区域选择）
 // ================================================================
 
 export async function onRequestPost({ request, env }) {
@@ -63,7 +111,7 @@ export async function onRequestPost({ request, env }) {
         return error('无效的请求数据', 400);
     }
 
-    const { name, tag, model, type, location } = body;
+    const { name, tag, model, type, location, region_id } = body;
 
     // 参数校验
     if (!name || name.trim() === '') {
@@ -74,6 +122,9 @@ export async function onRequestPost({ request, env }) {
     }
     if (!type || type.trim() === '') {
         return error('设备类型不能为空', 400);
+    }
+    if (!region_id) {
+        return error('请选择所属区域', 400);
     }
 
     try {
@@ -86,13 +137,22 @@ export async function onRequestPost({ request, env }) {
             return error('位号已存在', 400);
         }
 
+        // 检查区域是否存在
+        const regionCheck = env.DB.prepare(`
+            SELECT id FROM regions WHERE id = ?
+        `);
+        const regionExists = await regionCheck.bind(parseInt(region_id)).first();
+        if (!regionExists) {
+            return error('所选区域不存在', 400);
+        }
+
         // 获取或创建类型
         const typeId = await getOrCreateType(type.trim(), env);
 
-        // 插入设备（包含 model 字段）
+        // 插入设备（包含 region_id）
         const insertStmt = env.DB.prepare(`
-            INSERT INTO devices (name, tag, model, type_id, location)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO devices (name, tag, model, type_id, location, region_id)
+            VALUES (?, ?, ?, ?, ?, ?)
         `);
         const result = await insertStmt
             .bind(
@@ -100,7 +160,8 @@ export async function onRequestPost({ request, env }) {
                 tag.trim(),
                 model?.trim() || null,
                 typeId,
-                location?.trim() || null
+                location?.trim() || null,
+                parseInt(region_id)
             )
             .run();
 
@@ -111,6 +172,7 @@ export async function onRequestPost({ request, env }) {
             model: model?.trim() || null,
             type: type.trim(),
             location: location?.trim() || null,
+            region_id: parseInt(region_id),
         }, '设备添加成功');
     } catch (err) {
         console.error('[Devices] 添加失败:', err);
@@ -119,7 +181,7 @@ export async function onRequestPost({ request, env }) {
 }
 
 // ================================================================
-// 3. PUT /api/devices/:id - 编辑设备
+// 3. PUT /api/devices/:id - 编辑设备（支持区域修改）
 // ================================================================
 
 export async function onRequestPut({ request, env, params }) {
@@ -141,7 +203,7 @@ export async function onRequestPut({ request, env, params }) {
         return error('无效的请求数据', 400);
     }
 
-    const { name, tag, model, type, location } = body;
+    const { name, tag, model, type, location, region_id } = body;
 
     if (!name || name.trim() === '') {
         return error('设备名称不能为空', 400);
@@ -152,6 +214,9 @@ export async function onRequestPut({ request, env, params }) {
     if (!type || type.trim() === '') {
         return error('设备类型不能为空', 400);
     }
+    if (!region_id) {
+        return error('请选择所属区域', 400);
+    }
 
     try {
         const checkStmt = env.DB.prepare(`
@@ -160,6 +225,15 @@ export async function onRequestPut({ request, env, params }) {
         const existing = await checkStmt.bind(deviceId).first();
         if (!existing) {
             return error('设备不存在', 404);
+        }
+
+        // 检查区域是否存在
+        const regionCheck = env.DB.prepare(`
+            SELECT id FROM regions WHERE id = ?
+        `);
+        const regionExists = await regionCheck.bind(parseInt(region_id)).first();
+        if (!regionExists) {
+            return error('所选区域不存在', 400);
         }
 
         const tagCheckStmt = env.DB.prepare(`
@@ -172,10 +246,10 @@ export async function onRequestPut({ request, env, params }) {
 
         const typeId = await getOrCreateType(type.trim(), env);
 
-        // 更新设备（包含 model 字段）
+        // 更新设备（包含 region_id）
         const updateStmt = env.DB.prepare(`
             UPDATE devices
-            SET name = ?, tag = ?, model = ?, type_id = ?, location = ?
+            SET name = ?, tag = ?, model = ?, type_id = ?, location = ?, region_id = ?
             WHERE id = ?
         `);
         await updateStmt
@@ -185,6 +259,7 @@ export async function onRequestPut({ request, env, params }) {
                 model?.trim() || null,
                 typeId,
                 location?.trim() || null,
+                parseInt(region_id),
                 deviceId
             )
             .run();
