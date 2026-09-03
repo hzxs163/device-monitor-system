@@ -15,9 +15,19 @@ import { success, error, unauthorized, parseJSON } from '../utils/response.js';
 async function getUserByUsername(username, env) {
     try {
         const stmt = env.DB.prepare(`
-            SELECT id, username, nickname, password_hash, password_salt, role, is_active
-            FROM users
-            WHERE username = ?
+            SELECT 
+                u.id, 
+                u.username, 
+                u.nickname, 
+                u.password_hash, 
+                u.password_salt, 
+                u.role, 
+                u.is_active,
+                u.region_id,
+                r.name as region_name
+            FROM users u
+            LEFT JOIN regions r ON u.region_id = r.id
+            WHERE u.username = ?
         `);
         const result = await stmt.bind(username).first();
         return result || null;
@@ -60,22 +70,19 @@ async function handleLogin(request, env) {
         return error('用户名或密码错误', 401);
     }
 
-    const token = await signJWT(
-        {
-            id: user.id,
-            username: user.username,
-            nickname: user.nickname || user.username,
-            role: user.role || 'user',
-        },
-        env
-    );
-
+    // 构建用户数据（包含区域信息）
+    const isAdmin = user.role === 'admin';
     const userData = {
         id: user.id,
         username: user.username,
         nickname: user.nickname || user.username,
         role: user.role || 'user',
+        region_id: isAdmin ? null : user.region_id,      // 管理员为 null
+        region_name: isAdmin ? '全部区域' : (user.region_name || '未分配'),  // 管理员显示"全部区域"
+        is_admin: isAdmin,
     };
+
+    const token = await signJWT(userData, env);
 
     // 去掉 Secure 属性
     const cookie = `token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${60 * 60 * 24 * 7}`;
@@ -105,6 +112,9 @@ function handleMe({ user }) {
         username: user.username,
         nickname: user.nickname || user.username,
         role: user.role || 'user',
+        region_id: user.region_id || null,
+        region_name: user.region_name || '全部区域',
+        is_admin: user.role === 'admin',
     }, '获取用户信息成功');
 }
 
