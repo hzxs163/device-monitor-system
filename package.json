@@ -1,25 +1,11 @@
 {
   "name": "device-monitor-system",
   "version": "1.0.0",
-  "description": "设备运行监控系统 - D1 + Pages Functions",
   "type": "module",
   "scripts": {
-    "hash": "node scripts/hash-password.js"
+    "build": "echo 'Build complete'"
   },
-  "dependencies": {
-    "jose": "^5.9.6",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {},
   "engines": {
     "node": ">=18.0.0"
-  }
-}
-{
-  "name": "device-monitor-system",
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "build": "echo 'Building...'"
   }
 }
