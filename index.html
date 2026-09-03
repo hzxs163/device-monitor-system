@@ -1357,104 +1357,104 @@
         };
 
         // 内联编辑设备（支持区域修改）
-        window._inlineEditDevice = async function(deviceId) {
-            const devices = window.__devices || [];
-            const device = devices.find(d => d.id === deviceId);
-            if (!device) {
-                alert('设备不存在');
-                return;
-            }
-            const types = await loadDeviceTypes();
-            const typeOptions = types.map(t =>
-                `<option value="${t.name}" ${t.name === device.type ? 'selected' : ''}>${t.name}</option>`
-            ).join('');
-            const regions = await loadRegions();
-            const regionOptions = regions.map(r =>
-                `<option value="${r.id}" ${r.id === device.region_id ? 'selected' : ''}>${r.name}</option>`
-            ).join('');
+window._inlineEditDevice = async function(deviceId) {
+    const devices = window.__devices || [];
+    const device = devices.find(d => d.id === deviceId);
+    if (!device) {
+        alert('设备不存在');
+        return;
+    }
+    const types = await loadDeviceTypes();
+    const typeOptions = types.map(t =>
+        `<option value="${t.name}" ${t.name === device.type ? 'selected' : ''}>${t.name}</option>`
+    ).join('');
+    const regions = await loadRegions();
+    const regionOptions = regions.map(r =>
+        `<option value="${r.id}" ${r.id === device.region_id ? 'selected' : ''}>${r.name}</option>`
+    ).join('');
 
-            const html = `
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h2>✏️ 编辑设备</h2>
-                        <button class="modal-close" onclick="window.closeModal()">✕</button>
-                    </div>
-                    <form id="inlineEditDeviceForm">
-                        <div class="form-group">
-                            <label>设备名称 *</label>
-                            <input type="text" id="inlineEditDevName" value="${escapeHtml(device.name)}" required />
-                        </div>
-                        <div class="form-group">
-                            <label>位号 *</label>
-                            <input type="text" id="inlineEditDevTag" value="${escapeHtml(device.tag || '')}" required />
-                        </div>
-                        <div class="form-group">
-                            <label>型号</label>
-                            <input type="text" id="inlineEditDevModel" value="${escapeHtml(device.model || '')}" />
-                        </div>
-                        <div class="form-group">
-                            <label>设备类型 *</label>
-                            <select id="inlineEditDevType">${typeOptions}</select>
-                        </div>
-                        <div class="form-group">
-                            <label>位置</label>
-                            <input type="text" id="inlineEditDevLocation" value="${escapeHtml(device.location || '')}" />
-                        </div>
-                        <div class="form-group">
-                            <label>所属区域 *</label>
-                            <select id="inlineEditDevRegion">${regionOptions}</select>
-                        </div>
-                        <div class="modal-actions">
-                            <button type="button" class="btn btn-secondary" onclick="window.closeModal()">取消</button>
-                            <button type="submit" class="btn btn-primary">保存修改</button>
-                        </div>
-                    </form>
+    const html = `
+        <div class="modal-content" style="max-width:520px;width:100%;">
+            <div class="modal-header">
+                <h2>✏️ 编辑设备</h2>
+                <button class="modal-close" onclick="window.closeModal()">✕</button>
+            </div>
+            <form id="inlineEditDeviceForm">
+                <div class="form-group">
+                    <label>设备名称 *</label>
+                    <input type="text" id="inlineEditDevName" value="${escapeHtml(device.name)}" required style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" />
                 </div>
-            `;
+                <div class="form-group">
+                    <label>位号 *</label>
+                    <input type="text" id="inlineEditDevTag" value="${escapeHtml(device.tag || '')}" required style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" />
+                </div>
+                <div class="form-group">
+                    <label>型号</label>
+                    <input type="text" id="inlineEditDevModel" value="${escapeHtml(device.model || '')}" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" />
+                </div>
+                <div class="form-group">
+                    <label>设备类型 *</label>
+                    <select id="inlineEditDevType" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff;appearance:auto;min-height:44px;box-sizing:border-box;">${typeOptions}</select>
+                </div>
+                <div class="form-group">
+                    <label>位置</label>
+                    <input type="text" id="inlineEditDevLocation" value="${escapeHtml(device.location || '')}" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" />
+                </div>
+                <div class="form-group">
+                    <label>所属区域 *</label>
+                    <select id="inlineEditDevRegion" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff;appearance:auto;min-height:44px;box-sizing:border-box;">${regionOptions}</select>
+                </div>
+                <div class="modal-actions" style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="window.closeModal()" style="padding:10px 24px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:14px;">取消</button>
+                    <button type="submit" class="btn btn-primary" style="padding:10px 24px;border-radius:8px;border:none;background:#2563eb;color:#fff;cursor:pointer;font-size:14px;">保存修改</button>
+                </div>
+            </form>
+        </div>
+    `;
 
-            window.openModal(html);
+    window.openModal(html);
 
-            document.getElementById('inlineEditDeviceForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
-                const name = document.getElementById('inlineEditDevName').value.trim();
-                const tag = document.getElementById('inlineEditDevTag').value.trim();
-                const model = document.getElementById('inlineEditDevModel').value.trim();
-                const type = document.getElementById('inlineEditDevType').value;
-                const location = document.getElementById('inlineEditDevLocation').value.trim();
-                const region_id = parseInt(document.getElementById('inlineEditDevRegion').value);
+    document.getElementById('inlineEditDeviceForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const name = document.getElementById('inlineEditDevName').value.trim();
+        const tag = document.getElementById('inlineEditDevTag').value.trim();
+        const model = document.getElementById('inlineEditDevModel').value.trim();
+        const type = document.getElementById('inlineEditDevType').value;
+        const location = document.getElementById('inlineEditDevLocation').value.trim();
+        const region_id = parseInt(document.getElementById('inlineEditDevRegion').value);
 
-                if (!name || !tag || !type) {
-                    alert('请填写完整信息');
-                    return;
-                }
-                if (!region_id) {
-                    alert('请选择所属区域');
-                    return;
-                }
+        if (!name || !tag || !type) {
+            alert('请填写完整信息');
+            return;
+        }
+        if (!region_id) {
+            alert('请选择所属区域');
+            return;
+        }
 
-                try {
-                    const res = await fetch(`/api/devices/${deviceId}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name, tag, model, type, location, region_id })
-                    });
-                    const result = await res.json();
-                    if (result.success) {
-                        alert('✅ 设备已更新');
-                        window.closeModal();
-                        await loadDevices();
-                        renderDeviceManagement();
-                        if (typeof window.reloadDevices === 'function') {
-                            window.reloadDevices();
-                        }
-                    } else {
-                        alert('❌ ' + (result.error || '更新失败'));
-                    }
-                } catch (err) {
-                    alert('❌ 请求失败: ' + err.message);
-                }
+        try {
+            const res = await fetch(`/api/devices/${deviceId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, tag, model, type, location, region_id })
             });
-        };
+            const result = await res.json();
+            if (result.success) {
+                alert('✅ 设备已更新');
+                window.closeModal();
+                await loadDevices();
+                renderDeviceManagement();
+                if (typeof window.reloadDevices === 'function') {
+                    window.reloadDevices();
+                }
+            } else {
+                alert('❌ ' + (result.error || '更新失败'));
+            }
+        } catch (err) {
+            alert('❌ 请求失败: ' + err.message);
+        }
+    });
+};
 
         // 内联删除设备
         window._inlineDeleteDevice = async function(deviceId) {
