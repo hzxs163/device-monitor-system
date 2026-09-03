@@ -1281,6 +1281,191 @@
             }
         }
 
+        // ============================================================
+        // 用户管理 - 渲染用户列表
+        // ============================================================
+        async function renderUserManagement() {
+            const container = document.getElementById('adminTabContent');
+            if (!container) return;
+
+            try {
+                const res = await fetch('/api/users');
+                const result = await res.json();
+                if (!result.success) {
+                    container.innerHTML = `<div class="text-muted">加载用户列表失败: ${result.error}</div>`;
+                    return;
+                }
+
+                const users = result.data || [];
+                const regions = await loadRegions();
+
+                let html = `
+                    <div style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="window._inlineAddUser()">➕ 添加用户</button>
+                        <span style="font-size:14px;color:var(--gray-500);align-self:center;">
+                            共 ${users.length} 个用户
+                        </span>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="admin-list">
+                            <thead>
+                                <tr>
+                                    <th>用户名</th>
+                                    <th>昵称</th>
+                                    <th>角色</th>
+                                    <th>区域</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${users.map(u => `
+                                    <tr>
+                                        <td><strong>${escapeHtml(u.username)}</strong></td>
+                                        <td>${escapeHtml(u.nickname || '-')}</td>
+                                        <td>${u.role === 'admin' ? '🔑 管理员' : '👤 普通用户'}</td>
+                                        <td><span style="background:#eef2f7;padding:2px 8px;border-radius:10px;font-size:12px;">${escapeHtml(u.region_name || (u.role === 'admin' ? '全部区域' : '未分配'))}</span></td>
+                                        <td>${u.is_active === 1 ? '🟢 启用' : '🔴 禁用'}</td>
+                                        <td>
+                                            <div class="actions">
+                                                <button class="btn-edit" onclick="window._inlineEditUser('${u.id}')">✏️</button>
+                                                <button class="btn-delete" onclick="window._inlineToggleUser('${u.id}', ${u.is_active})">${u.is_active === 1 ? '禁用' : '启用'}</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                                ${users.length === 0 ? `
+                                    <tr><td colspan="6" class="text-center text-muted">暂无用户</td></tr>
+                                ` : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = `<div class="text-muted">加载用户列表失败: ${err.message}</div>`;
+            }
+        }
+
+        // ============================================================
+        // 内联添加用户
+        // ============================================================
+        window._inlineAddUser = async function() {
+            const regions = await loadRegions();
+            const regionOptions = regions.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+
+            const html = `
+                <div class="modal-content" style="max-width:520px;width:100%;">
+                    <div class="modal-header">
+                        <h2>➕ 添加用户</h2>
+                        <button class="modal-close" onclick="window.closeModal()">✕</button>
+                    </div>
+                    <form id="inlineAddUserForm">
+                        <div class="form-group">
+                            <label>用户名 *</label>
+                            <input type="text" id="inlineAddUsername" placeholder="如：zhangsan" required style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" />
+                        </div>
+                        <div class="form-group">
+                            <label>昵称 *</label>
+                            <input type="text" id="inlineAddNickname" placeholder="如：张三" required style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" />
+                        </div>
+                        <div class="form-group">
+                            <label>初始密码 *</label>
+                            <input type="password" id="inlineAddPassword" placeholder="至少4位" required style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" />
+                        </div>
+                        <div class="form-group">
+                            <label>角色 *</label>
+                            <select id="inlineAddRole" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff;appearance:auto;min-height:44px;box-sizing:border-box;">
+                                <option value="user">普通用户</option>
+                                <option value="admin">管理员</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>所属区域 *</label>
+                            <select id="inlineAddUserRegion" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff;appearance:auto;min-height:44px;box-sizing:border-box;">
+                                ${regionOptions}
+                            </select>
+                        </div>
+                        <div class="modal-actions" style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+                            <button type="button" class="btn btn-secondary" onclick="window.closeModal()" style="padding:10px 24px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:14px;">取消</button>
+                            <button type="submit" class="btn btn-primary" style="padding:10px 24px;border-radius:8px;border:none;background:#2563eb;color:#fff;cursor:pointer;font-size:14px;">确认添加</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+
+            window.openModal(html);
+
+            document.getElementById('inlineAddUserForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const username = document.getElementById('inlineAddUsername').value.trim();
+                const nickname = document.getElementById('inlineAddNickname').value.trim();
+                const password = document.getElementById('inlineAddPassword').value;
+                const role = document.getElementById('inlineAddRole').value;
+                const region_id = parseInt(document.getElementById('inlineAddUserRegion').value);
+
+                if (!username || !nickname || !password) {
+                    alert('请填写完整信息');
+                    return;
+                }
+                if (password.length < 4) {
+                    alert('密码至少4位');
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/api/users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, nickname, password, role, region_id })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('✅ 用户添加成功');
+                        window.closeModal();
+                        renderUserManagement();
+                    } else {
+                        alert('❌ ' + (result.error || '添加失败'));
+                    }
+                } catch (err) {
+                    alert('❌ 请求失败: ' + err.message);
+                }
+            });
+        };
+
+        // ============================================================
+        // 内联启用/禁用用户
+        // ============================================================
+        window._inlineToggleUser = async function(userId, currentStatus) {
+            const newStatus = currentStatus === 1 ? 0 : 1;
+            const action = newStatus === 1 ? '启用' : '禁用';
+            if (!confirm(`确认${action}该用户？`)) return;
+
+            try {
+                const res = await fetch(`/api/users/${userId}/toggle`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_active: newStatus })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    alert(`✅ 用户已${action}`);
+                    renderUserManagement();
+                } else {
+                    alert('❌ ' + (result.error || '操作失败'));
+                }
+            } catch (err) {
+                alert('❌ 请求失败: ' + err.message);
+            }
+        };
+
+        // ============================================================
+        // 内联编辑用户（预留，暂未实现完整功能）
+        // ============================================================
+        window._inlineEditUser = async function(userId) {
+            alert('编辑用户功能开发中，暂不可用');
+        };
+
         // 打开管理面板
         window.openAdminPanel = function() {
             const html = `
@@ -1288,6 +1473,7 @@
                     <div class="admin-tabs">
                         <button class="admin-tab active" data-tab="devices">📟 设备管理</button>
                         <button class="admin-tab" data-tab="types">🏷️ 类型管理</button>
+                        <button class="admin-tab" data-tab="users">👤 用户管理</button>
                     </div>
                     <div class="admin-content">
                         <div id="adminTabContent"></div>
@@ -1306,6 +1492,7 @@
                     this.classList.add('active');
                     if (this.dataset.tab === 'devices') renderDeviceManagement();
                     else if (this.dataset.tab === 'types') renderTypeManagementInline();
+                    else if (this.dataset.tab === 'users') renderUserManagement();
                 });
             });
         };
