@@ -347,40 +347,52 @@
         }
 
         // ============================================================
-        // 加载区域下拉选项（管理员专用）
+        // 加载区域下拉选项（管理员专用）- 接口失败时使用硬编码数据
         // ============================================================
         async function loadRegionOptions() {
+            const defaultRegions = [
+                { id: 1, name: '动力一工段' },
+                { id: 2, name: '动力二工段' },
+                { id: 3, name: '污水站' },
+                { id: 4, name: '罐区' }
+            ];
+
+            function fillRegionFilter(regions) {
+                regionFilter.innerHTML = '<option value="all">全部区域</option>';
+                regions.forEach(r => {
+                    const option = document.createElement('option');
+                    option.value = r.id;
+                    option.textContent = r.name;
+                    regionFilter.appendChild(option);
+                });
+                // 绑定区域筛选事件（避免重复绑定）
+                regionFilter.onchange = function() {
+                    const regionId = this.value;
+                    setRegionFilter(regionId);
+                    loadDevices().then(() => {
+                        renderDevices();
+                        renderTypeTabs();
+                        loadStatistics().then(() => {
+                            renderTypeSummary();
+                            renderRankTable();
+                            updateStatsBar();
+                        });
+                    });
+                };
+            }
+
             try {
                 const res = await fetch('/api/regions');
                 const result = await res.json();
-                if (result.success && result.data) {
-                    const regions = result.data;
-                    regionFilter.innerHTML = '<option value="all">全部区域</option>';
-                    regions.forEach(r => {
-                        const option = document.createElement('option');
-                        option.value = r.id;
-                        option.textContent = r.name;
-                        regionFilter.appendChild(option);
-                    });
-                    // 绑定区域筛选事件
-                    regionFilter.addEventListener('change', function() {
-                        const regionId = this.value;
-                        setRegionFilter(regionId);
-                        // 重新加载设备
-                        loadDevices().then(() => {
-                            renderDevices();
-                            renderTypeTabs();
-                            // 重新加载统计
-                            loadStatistics().then(() => {
-                                renderTypeSummary();
-                                renderRankTable();
-                                updateStatsBar();
-                            });
-                        });
-                    });
+                if (result.success && result.data && result.data.length > 0) {
+                    fillRegionFilter(result.data);
+                    return;
                 }
+                console.warn('[loadRegionOptions] 接口返回空数据，使用默认区域');
+                fillRegionFilter(defaultRegions);
             } catch (err) {
-                console.error('[Index] 加载区域列表失败:', err);
+                console.error('[loadRegionOptions] 接口请求失败，使用默认区域:', err);
+                fillRegionFilter(defaultRegions);
             }
         }
 
