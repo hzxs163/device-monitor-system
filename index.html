@@ -839,14 +839,24 @@
             const modeSelect = document.getElementById('correctMode');
             const startFields = document.getElementById('correctStartFields');
             const stopFields = document.getElementById('correctStopFields');
+            const startTimeDisplay = document.getElementById('correctStartTimeDisplay');
 
             modeSelect.addEventListener('change', function() {
                 if (this.value === 'start') {
                     startFields.style.display = 'block';
                     stopFields.style.display = 'none';
+                    // 补录模式：开机时间可编辑
+                    document.getElementById('correctStartTime').disabled = false;
                 } else {
                     startFields.style.display = 'none';
                     stopFields.style.display = 'block';
+                    // 修正停机模式：开机时间自动填充并禁用
+                    if (device.current_start_time) {
+                        startTimeDisplay.value = formatTimestamp(device.current_start_time, 'datetime');
+                    } else {
+                        startTimeDisplay.value = '--';
+                    }
+                    startTimeDisplay.disabled = true;
                 }
             });
 
