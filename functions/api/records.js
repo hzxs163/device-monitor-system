@@ -48,8 +48,9 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
         const actionText = action === 'start' ? '🟢 开机' : '🔴 停机';
         const durationText = duration !== null ? `\n运行时长：${formatDuration(duration)}` : '';
 
-        const content = `📢 **设备状态变更通知**\n\n` +
-            `设备名称：${deviceName}\n` +
+        const title = `【设备监控】${deviceName} ${actionText}`;
+
+        const content = `设备名称：${deviceName}\n` +
             `位　　号：${deviceTag || '-'}\n` +
             `操　　作：${actionText}\n` +
             `操作人：${operatorName || '系统'}\n` +
@@ -57,6 +58,7 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
 
         const pushData = {
             appToken: appToken,
+            title: title,
             content: content,
             contentType: 1, // 1=文本
             uids: [uid]
