@@ -32,6 +32,9 @@ async function parseJSON(request) {
 // ================================================================
 // WxPusher 推送
 // ================================================================
+// ================================================================
+// WxPusher 推送
+// ================================================================
 async function sendWxPusherNotification(env, deviceName, deviceTag, action, operatorName, duration = null) {
     try {
         const appToken = env.WXPUSHER_APP_TOKEN;
@@ -48,10 +51,10 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
         const actionText = action === 'start' ? '开机' : '停机';
         const durationText = duration !== null ? `\n运行时长：${formatDuration(duration)}` : '';
 
-        // 标题：纯文本，不含特殊符号
-        const title = `设备监控 ${deviceName} ${actionText}`;
+        // 标题：单独设置，不包含在 content 中
+        const title = `【设备监控】${deviceName} ${actionText}`;
 
-        // 内容：详细参数
+        // 内容：纯参数，不包含标题行
         const content = `设备名称：${deviceName}\n` +
             `位　　号：${deviceTag || '-'}\n` +
             `操　　作：${actionText}\n` +
@@ -83,18 +86,6 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
     } catch (err) {
         console.error('[WxPusher] 推送异常:', err);
     }
-}
-
-function formatDuration(seconds) {
-    if (!seconds || seconds < 0) return '0秒';
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    const parts = [];
-    if (hours > 0) parts.push(`${hours}小时`);
-    if (minutes > 0) parts.push(`${minutes}分`);
-    if (secs > 0 && hours === 0) parts.push(`${secs}秒`);
-    return parts.join('') || '0秒';
 }
 
 // ================================================================
