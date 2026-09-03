@@ -742,6 +742,7 @@
                     </div>
                     <div class="modal-actions" style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
                         ${isAdmin ? `<button class="btn btn-primary" onclick="window.editDeviceParams(${device.id})">✏️ 编辑参数</button>` : ''}
+                        ${isAdmin ? `<button class="btn btn-warning" onclick="window.showCorrectModal(${device.id})">📝 补录/修正</button>` : ''}
                         <button class="btn btn-secondary" onclick="window.closeModal()">关 闭</button>
                     </div>
                 </div>
@@ -749,6 +750,213 @@
 
             window.openModal(html);
         };
+
+        // ============================================================
+        // 补录/修正运行记录（管理员专用）
+        // ============================================================
+
+        window.showCorrectModal = function(deviceId) {
+            const devices = window.__devices || [];
+            const device = devices.find(d => d.id === deviceId);
+            if (!device) {
+                alert('设备不存在');
+                return;
+            }
+
+            const isRunning = device.status === 1;
+
+            const html = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>📝 补录/修正运行记录</h2>
+                        <button class="modal-close" onclick="window.closeModal()">✕</button>
+                    </div>
+                    <div style="margin-bottom:12px;font-size:14px;color:#1e293b;">
+                        <strong>设备：</strong>${escapeHtml(device.name)}（${escapeHtml(device.tag || '-')}）
+                        <span style="margin-left:12px;color:${isRunning ? '#22c55e' : '#94a3b8'};">当前状态：${isRunning ? '🟢 运行中' : '⚪ 已停机'}</span>
+                    </div>
+
+                    <form id="correctForm">
+                        <!-- 操作类型选择 -->
+                        <div class="form-group">
+                            <label>操作类型 *</label>
+                            <select id="correctMode" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                                <option value="start">补录运行（忘记开机，补录完整运行区间）</option>
+                                <option value="stop" ${isRunning ? 'selected' : 'disabled'}>修正停机（忘记停机，修正实际停机时间）</option>
+                            </select>
+                            ${!isRunning ? '<div style="font-size:12px;color:#94a3b8;margin-top:4px;">⚠️ 设备已停机，无法选择"修正停机"</div>' : ''}
+                        </div>
+
+                        <!-- 补录运行模式（start） -->
+                        <div id="correctStartFields">
+                            <div class="form-group">
+                                <label>补录开始时间 *</label>
+                                <input type="datetime-local" id="correctStartTime" required />
+                            </div>
+                            <div class="form-group">
+                                <label>补录结束时间 *</label>
+                                <input type="datetime-local" id="correctEndTime" required />
+                            </div>
+                            <div style="font-size:12px;color:#94a3b8;margin-top:-8px;margin-bottom:12px;">
+                                ⚠️ 补录时间不能超过当前时间，且开始时间必须早于结束时间
+                            </div>
+                        </div>
+
+                        <!-- 修正停机模式（stop） -->
+                        <div id="correctStopFields" style="display:none;">
+                            <div class="form-group">
+                                <label>开机时间（系统记录）</label>
+                                <input type="text" id="correctStartTimeDisplay" value="${device.current_start_time ? formatTimestamp(device.current_start_time, 'datetime') : '--'}" disabled style="background:#f1f4f9;width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;" />
+                            </div>
+                            <div class="form-group">
+                                <label>实际停机时间 *</label>
+                                <input type="datetime-local" id="correctStopTime" required />
+                            </div>
+                            <div style="font-size:12px;color:#94a3b8;margin-top:-8px;margin-bottom:12px;">
+                                ⚠️ 停机时间必须大于开机时间，且不能超过当前时间
+                            </div>
+                        </div>
+
+                        <!-- 原因说明 -->
+                        <div class="form-group">
+                            <label>原因说明 *</label>
+                            <textarea id="correctReason" rows="2" placeholder="请说明补录或修正的原因..." style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>
+                        </div>
+
+                        <div class="modal-actions" style="margin-top:16px;">
+                            <button type="button" class="btn btn-secondary" onclick="window.closeModal()">取消</button>
+                            <button type="submit" class="btn btn-primary">确认提交</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+
+            window.openModal(html);
+
+            // ============================================================
+            // 模式切换
+            // ============================================================
+            const modeSelect = document.getElementById('correctMode');
+            const startFields = document.getElementById('correctStartFields');
+            const stopFields = document.getElementById('correctStopFields');
+
+            modeSelect.addEventListener('change', function() {
+                if (this.value === 'start') {
+                    startFields.style.display = 'block';
+                    stopFields.style.display = 'none';
+                } else {
+                    startFields.style.display = 'none';
+                    stopFields.style.display = 'block';
+                }
+            });
+
+            // ============================================================
+            // 设置默认时间
+            // ============================================================
+            const now = new Date();
+            const nowStr = now.toISOString().slice(0, 16);
+            const todayStr = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 0).toISOString().slice(0, 16);
+
+            document.getElementById('correctStartTime').value = todayStr;
+            document.getElementById('correctEndTime').value = nowStr;
+            document.getElementById('correctStopTime').value = nowStr;
+
+            // ============================================================
+            // 表单提交
+            // ============================================================
+            document.getElementById('correctForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const mode = document.getElementById('correctMode').value;
+                const reason = document.getElementById('correctReason').value.trim();
+
+                if (!reason) {
+                    alert('请填写原因说明');
+                    return;
+                }
+
+                let payload = { deviceId, mode, reason };
+
+                if (mode === 'start') {
+                    const startTime = document.getElementById('correctStartTime').value;
+                    const endTime = document.getElementById('correctEndTime').value;
+                    if (!startTime || !endTime) {
+                        alert('请填写开始时间和结束时间');
+                        return;
+                    }
+                    const startTs = Math.floor(new Date(startTime).getTime() / 1000);
+                    const endTs = Math.floor(new Date(endTime).getTime() / 1000);
+                    if (endTs <= startTs) {
+                        alert('结束时间必须大于开始时间');
+                        return;
+                    }
+                    if (endTs > Math.floor(Date.now() / 1000)) {
+                        alert('结束时间不能超过当前时间');
+                        return;
+                    }
+                    payload.startTime = startTs;
+                    payload.endTime = endTs;
+
+                } else {
+                    const stopTime = document.getElementById('correctStopTime').value;
+                    if (!stopTime) {
+                        alert('请填写实际停机时间');
+                        return;
+                    }
+                    const stopTs = Math.floor(new Date(stopTime).getTime() / 1000);
+                    if (stopTs > Math.floor(Date.now() / 1000)) {
+                        alert('停机时间不能超过当前时间');
+                        return;
+                    }
+                    const startTs = device.current_start_time;
+                    if (stopTs <= startTs) {
+                        alert('停机时间必须大于开机时间');
+                        return;
+                    }
+                    payload.stopTime = stopTs;
+                }
+
+                try {
+                    const res = await fetch('/api/records/correct', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert('✅ ' + (result.message || '操作成功'));
+                        window.closeModal();
+                        // 刷新设备列表
+                        await loadDevices();
+                        renderDevices();
+                        // 刷新统计
+                        await loadStatistics();
+                        renderTypeSummary();
+                        renderRankTable();
+                        updateStatsBar();
+                    } else {
+                        alert('❌ ' + (result.error || '操作失败'));
+                    }
+                } catch (err) {
+                    alert('❌ 请求失败: ' + err.message);
+                }
+            });
+        };
+
+        // 格式化时间戳（用于显示）
+        function formatTimestamp(timestamp, format = 'datetime') {
+            if (!timestamp) return '--';
+            const date = new Date(timestamp * 1000);
+            const pad = (n) => String(n).padStart(2, '0');
+            const y = date.getFullYear();
+            const m = pad(date.getMonth() + 1);
+            const d = pad(date.getDate());
+            const h = pad(date.getHours());
+            const min = pad(date.getMinutes());
+            if (format === 'date') return `${y}-${m}-${d}`;
+            if (format === 'time') return `${h}:${min}`;
+            return `${y}-${m}-${d} ${h}:${min}`;
+        }
 
         async function loadDeviceTypes() {
             try {
