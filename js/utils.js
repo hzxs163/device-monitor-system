@@ -161,7 +161,7 @@ export function closeModal() {
 }
 
 // ================================================================
-// 5. 时间格式化工具
+// 5. 时间格式化工具（统一使用北京时间）
 // ================================================================
 
 /**
@@ -198,7 +198,7 @@ export function formatHours(seconds) {
 }
 
 /**
- * 将时间戳转换为本地日期字符串
+ * 将时间戳转换为北京时间日期字符串
  * @param {number} timestamp - Unix 时间戳（秒）
  * @param {string} format - 格式: 'date' | 'datetime' | 'time'
  * @returns {string}
@@ -207,6 +207,7 @@ export function formatTimestamp(timestamp, format = 'datetime') {
     if (!timestamp) return '--';
     const date = new Date(timestamp * 1000);
 
+    // 使用北京时间
     const pad = (n) => String(n).padStart(2, '0');
     const y = date.getFullYear();
     const m = pad(date.getMonth() + 1);
@@ -222,6 +223,32 @@ export function formatTimestamp(timestamp, format = 'datetime') {
         case 'datetime':
         default:
             return `${y}-${m}-${d} ${h}:${min}`;
+    }
+}
+
+/**
+ * 获取当前时间的北京时间字符串
+ * @param {string} format - 格式: 'datetime' | 'date' | 'time'
+ * @returns {string}
+ */
+export function getBeijingTime(format = 'datetime') {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const y = now.getFullYear();
+    const m = pad(now.getMonth() + 1);
+    const d = pad(now.getDate());
+    const h = pad(now.getHours());
+    const min = pad(now.getMinutes());
+    const sec = pad(now.getSeconds());
+
+    switch (format) {
+        case 'date':
+            return `${y}-${m}-${d}`;
+        case 'time':
+            return `${h}:${min}:${sec}`;
+        case 'datetime':
+        default:
+            return `${y}-${m}-${d} ${h}:${min}:${sec}`;
     }
 }
 
@@ -419,6 +446,7 @@ export default {
     formatDuration,
     formatHours,
     formatTimestamp,
+    getBeijingTime,
     getMonthRange,
     getMonthLabel,
     debounce,
