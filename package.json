@@ -15,3 +15,11 @@
     "node": ">=18.0.0"
   }
 }
+{
+  "name": "device-monitor-system",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'Building...'"
+  }
+}
