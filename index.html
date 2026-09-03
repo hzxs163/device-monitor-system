@@ -781,8 +781,8 @@
                         <div class="form-group">
                             <label>操作类型 *</label>
                             <select id="correctMode" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                                <option value="start">补录运行（忘记开机，补录完整运行区间）</option>
-                                <option value="stop" ${isRunning ? 'selected' : 'disabled'}>修正停机（忘记停机，修正实际停机时间）</option>
+                                <option value="start" selected>补录运行（忘点开机，补录完整运行区间）</option>
+                                <option value="stop" ${isRunning ? 'selected' : 'disabled'}>修正停机（忘点停机，修正实际停机时间）</option>
                             </select>
                             ${!isRunning ? '<div style="font-size:12px;color:#94a3b8;margin-top:4px;">⚠️ 设备已停机，无法选择"修正停机"</div>' : ''}
                         </div>
