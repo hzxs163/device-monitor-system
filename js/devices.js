@@ -160,7 +160,99 @@ export function renderDevices() {
         return;
     }
 
-    // 按类型分组
+    // 检查是否有搜索关键词
+    const hasSearch = searchKeyword && searchKeyword.trim() !== '';
+
+    if (hasSearch) {
+        // ============================================================
+        // 搜索模式：扁平列表，不分组
+        // ============================================================
+        let html = `
+            <div style="padding:8px 4px 16px 4px;font-size:14px;color:#94a3b8;">
+                找到 ${devices.length} 台设备
+            </div>
+            <div style="display:grid;gap:12px;grid-template-columns:1fr;">
+        `;
+
+        devices.forEach(device => {
+            const isRunning = device.status === 1;
+            const statusText = isRunning ? '运行中' : '已停机';
+            const statusClass = isRunning ? 'running' : 'stopped';
+            const currentDuration = isRunning && device.current_start_time
+                ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
+                : '--';
+            const monthlyHours = device.monthly_hours || 0;
+            const monthlyText = monthlyHours > 0 ? `${monthlyHours}小时` : '0小时';
+
+            const actionBtn = isRunning
+                ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
+                : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
+
+            html += `
+                <div class="device-card ${statusClass}" data-id="${device.id}" onclick="window.showDeviceDetail(${device.id})" style="cursor:pointer;">
+                    <div class="card-row">
+                        <span class="device-name">${escapeHtml(device.name)}</span>
+                        <span class="device-status">
+                            <span class="status-dot ${statusClass}"></span>
+                            ${statusText}
+                        </span>
+                    </div>
+                    <div class="card-row">
+                        <span class="device-tag">位号: ${escapeHtml(device.tag || '-')}</span>
+                        <span class="device-type">${escapeHtml(device.type || '未分类')}</span>
+                    </div>
+                    <div class="card-row">
+                        <span class="device-tag">型号: ${escapeHtml(device.model || '-')}</span>
+                    </div>
+                    <div class="card-row">
+                        <span class="device-duration" style="display:flex;justify-content:space-between;font-size:var(--text-sm);gap:12px;">
+                            <span>本月运行: ${monthlyText}</span>
+                            <span>本次运行: ${currentDuration}</span>
+                        </span>
+                    </div>
+                    <div class="card-actions">
+                        ${actionBtn}
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+        grid.innerHTML = html;
+
+        // 绑定卡片按钮事件
+        grid.querySelectorAll('[data-action]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const deviceId = parseInt(btn.dataset.id);
+                const action = btn.dataset.action;
+                if (action === 'start') {
+                    handleStart(deviceId);
+                } else if (action === 'stop') {
+                    handleStop(deviceId);
+                }
+            });
+        });
+
+        // 绑定卡片点击事件（排除按钮点击）
+        grid.querySelectorAll('.device-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                if (e.target.closest('.btn-start') || e.target.closest('.btn-stop')) {
+                    return;
+                }
+                const deviceId = parseInt(this.dataset.id);
+                if (typeof window.showDeviceDetail === 'function') {
+                    window.showDeviceDetail(deviceId);
+                }
+            });
+        });
+
+        return;
+    }
+
+    // ============================================================
+    // 正常模式：按类型分组
+    // ============================================================
     const grouped = {};
     devices.forEach(device => {
         const type = device.type || '未分类';
@@ -170,9 +262,6 @@ export function renderDevices() {
         grouped[type].push(device);
     });
 
-    // ============================================================
-    // 按 sort_order 排序
-    // ============================================================
     let sortedTypes = [];
     
     if (window.__allTypes && window.__allTypes.length > 0) {
@@ -198,18 +287,18 @@ export function renderDevices() {
         const stopped = total - running;
         const groupId = 'group-' + type.replace(/\s/g, '-') + '-' + Date.now();
 
-html += `
-    <div class="type-group" data-group="${groupId}">
-        <div class="type-group-header" onclick="window.toggleGroup('${groupId}')" style="cursor:pointer;">
-            <span class="type-group-name" id="${groupId}-arrow">▶ ${escapeHtml(type)}</span>
-            <span class="type-group-stats">
-                <span class="type-group-count">共 ${total} 台</span>
-                <span class="type-group-running">● ${running} 台开机</span>
-                <span class="type-group-stopped">○ ${stopped} 台停机</span>
-            </span>
-        </div>
-        <div class="type-group-grid" id="${groupId}-content" style="display:none;">
-`;
+        html += `
+            <div class="type-group" data-group="${groupId}">
+                <div class="type-group-header" onclick="window.toggleGroup('${groupId}')" style="cursor:pointer;">
+                    <span class="type-group-name" id="${groupId}-arrow">▶ ${escapeHtml(type)}</span>
+                    <span class="type-group-stats">
+                        <span class="type-group-count">共 ${total} 台</span>
+                        <span class="type-group-running">● ${running} 台开机</span>
+                        <span class="type-group-stopped">○ ${stopped} 台停机</span>
+                    </span>
+                </div>
+                <div class="type-group-grid" id="${groupId}-content" style="display:none;">
+        `;
 
         typeDevices.forEach(device => {
             const isRunning = device.status === 1;
@@ -412,13 +501,9 @@ export function updateDeviceLocal(deviceId, updates) {
     const device = allDevices.find(d => d.id === deviceId);
     if (!device) return;
 
-    // 更新数据
     Object.assign(device, updates);
-
-    // 更新统计栏
     updateStatsBarOnly();
 
-    // 只更新对应的卡片 DOM，不重新渲染全部
     const card = document.querySelector(`.device-card[data-id="${deviceId}"]`);
     if (card) {
         const isRunning = device.status === 1;
@@ -427,12 +512,10 @@ export function updateDeviceLocal(deviceId, updates) {
         const durationEl = card.querySelector('.device-duration');
         const actionBtn = card.querySelector('.card-actions .btn-start, .card-actions .btn-stop');
 
-        // 更新状态点
         if (statusDot) {
             statusDot.className = `status-dot ${isRunning ? 'running' : 'stopped'}`;
         }
 
-        // 更新状态文字
         if (statusText) {
             statusText.innerHTML = `
                 <span class="status-dot ${isRunning ? 'running' : 'stopped'}"></span>
@@ -440,7 +523,6 @@ export function updateDeviceLocal(deviceId, updates) {
             `;
         }
 
-        // 更新运行时
         if (durationEl) {
             const currentDuration = isRunning && device.current_start_time
                 ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
@@ -453,13 +535,11 @@ export function updateDeviceLocal(deviceId, updates) {
             `;
         }
 
-        // 更新按钮
         if (actionBtn) {
             const newBtn = isRunning
                 ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
                 : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
             actionBtn.outerHTML = newBtn;
-            // 重新绑定按钮事件
             const newActionBtn = card.querySelector('.card-actions .btn-start, .card-actions .btn-stop');
             if (newActionBtn) {
                 newActionBtn.addEventListener('click', (e) => {
@@ -475,19 +555,14 @@ export function updateDeviceLocal(deviceId, updates) {
             }
         }
 
-        // 更新卡片样式
         card.className = `device-card ${isRunning ? 'running' : 'stopped'}`;
     }
 
-    // 触发统计更新
     if (onDeviceChange) {
         onDeviceChange();
     }
 }
 
-/**
- * 只更新统计栏，不刷新整个页面
- */
 function updateStatsBarOnly() {
     const devices = window.__devices || [];
     const running = devices.filter(d => d.status === 1 && !d.is_deleted).length;
@@ -495,7 +570,6 @@ function updateStatsBarOnly() {
     if (runningCountEl) {
         runningCountEl.textContent = `${running} 台`;
     }
-    // 总运行时长不变，不需要更新
 }
 
 export function onDeviceChangeCallback(callback) {
