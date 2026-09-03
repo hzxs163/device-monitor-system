@@ -198,18 +198,18 @@ export function renderDevices() {
         const stopped = total - running;
         const groupId = 'group-' + type.replace(/\s/g, '-') + '-' + Date.now();
 
-        html += `
-            <div class="type-group" data-group="${groupId}">
-                <div class="type-group-header" onclick="window.toggleGroup('${groupId}')" style="cursor:pointer;">
-                    <span class="type-group-name" id="${groupId}-arrow">▼ ${escapeHtml(type)}</span>
-                    <span class="type-group-stats">
-                        <span class="type-group-count">共 ${total} 台</span>
-                        <span class="type-group-running">● ${running} 台开机</span>
-                        <span class="type-group-stopped">○ ${stopped} 台停机</span>
-                    </span>
-                </div>
-                <div class="type-group-grid" id="${groupId}-content">
-        `;
+html += `
+    <div class="type-group" data-group="${groupId}">
+        <div class="type-group-header" onclick="window.toggleGroup('${groupId}')" style="cursor:pointer;">
+            <span class="type-group-name" id="${groupId}-arrow">▶ ${escapeHtml(type)}</span>
+            <span class="type-group-stats">
+                <span class="type-group-count">共 ${total} 台</span>
+                <span class="type-group-running">● ${running} 台开机</span>
+                <span class="type-group-stopped">○ ${stopped} 台停机</span>
+            </span>
+        </div>
+        <div class="type-group-grid" id="${groupId}-content" style="display:none;">
+`;
 
         typeDevices.forEach(device => {
             const isRunning = device.status === 1;
