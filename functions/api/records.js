@@ -32,17 +32,29 @@ async function parseJSON(request) {
 // ================================================================
 // 权限校验：检查用户是否有权限操作该设备
 // ================================================================
-async function checkDevicePermission(env, deviceId, user) {
-    if (!user) {
+async function checkDevicePermission(env, deviceId, user, userId, regionId) {
+    // 如果 user 为空或没有 region_id，用 userId 从数据库查
+    let effectiveUser = user;
+    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
+        const userStmt = env.DB.prepare('SELECT id, role, region_id FROM users WHERE id = ?');
+        effectiveUser = await userStmt.bind(userId).first();
+    }
+
+    if (!effectiveUser) {
         return { allowed: false, error: '请先登录', status: 401 };
     }
 
     // 管理员：允许操作所有设备
-    if (user.role === 'admin') {
+    if (effectiveUser.role === 'admin') {
         return { allowed: true, device: null };
     }
 
-    // 普通用户：检查设备是否属于该用户所在区域
+    // 普通用户：用 effectiveUser.region_id 或前端传来的 regionId
+    const userRegionId = effectiveUser.region_id || regionId;
+    if (!userRegionId) {
+        return { allowed: false, error: '用户未分配区域，请联系管理员', status: 403 };
+    }
+
     try {
         const deviceStmt = env.DB.prepare(`
             SELECT id, name, tag, region_id
@@ -55,12 +67,11 @@ async function checkDevicePermission(env, deviceId, user) {
             return { allowed: false, error: '设备不存在', status: 404 };
         }
 
-        // 检查设备是否属于用户区域
-        if (device.region_id !== user.region_id) {
-            return { 
-                allowed: false, 
-                error: '您没有权限操作该区域的设备', 
-                status: 403 
+        if (device.region_id !== userRegionId) {
+            return {
+                allowed: false,
+                error: '您没有权限操作该区域的设备',
+                status: 403
             };
         }
 
@@ -138,22 +149,26 @@ async function handleStart(request, env, user) {
         return error('无效的请求数据', 400);
     }
 
-    const { deviceId } = body;
+    const { deviceId, userId, regionId } = body;
 
     if (!deviceId || typeof deviceId !== 'number') {
         return error('设备 ID 不能为空', 400);
     }
 
-    // ============================================================
-    // 权限校验
-    // ============================================================
-    const permission = await checkDevicePermission(env, deviceId, user);
+    // 权限校验（传入 userId 和 regionId）
+    const permission = await checkDevicePermission(env, deviceId, user, userId, regionId);
     if (!permission.allowed) {
         return error(permission.error, permission.status);
     }
 
+    // 获取有效用户信息（用于记录操作人）
+    let effectiveUser = user;
+    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
+        const userStmt = env.DB.prepare('SELECT id, username, nickname, role, region_id FROM users WHERE id = ?');
+        effectiveUser = await userStmt.bind(userId).first();
+    }
+
     try {
-        // 获取设备信息（权限校验已查过一次，但重新查一次确保最新状态）
         const deviceStmt = env.DB.prepare(`
             SELECT id, name, tag, status, current_start_time
             FROM devices
@@ -175,24 +190,22 @@ async function handleStart(request, env, user) {
             INSERT INTO run_records (device_id, start_time, operator_id)
             VALUES (?, ?, ?)
         `);
-        await insertStmt.bind(deviceId, now, user?.id || 'system').run();
+        await insertStmt.bind(deviceId, now, effectiveUser?.id || 'system').run();
 
         const updateStmt = env.DB.prepare(`
             UPDATE devices SET status = 1, current_start_time = ? WHERE id = ?
         `);
         await updateStmt.bind(now, deviceId).run();
 
-        // WxPusher 推送（开机）
         await sendWxPusherNotification(
             env,
             device.name,
             device.tag,
             'start',
-            user?.nickname || user?.username || '系统'
+            effectiveUser?.nickname || effectiveUser?.username || '系统'
         );
 
-        // 记录普通用户操作日志
-        if (user && user.role !== 'admin') {
+        if (effectiveUser && effectiveUser.role !== 'admin') {
             try {
                 const logStmt = env.DB.prepare(`
                     INSERT INTO user_operations (device_id, device_name, device_tag, operator_id, operator_name, action, duration_seconds)
@@ -202,12 +215,12 @@ async function handleStart(request, env, user) {
                     deviceId,
                     device.name,
                     device.tag || '',
-                    user.id,
-                    user.nickname || user.username,
+                    effectiveUser.id,
+                    effectiveUser.nickname || effectiveUser.username,
                     'start',
                     null
                 ).run();
-                console.log('[Records] 普通用户开机日志已记录:', user.username);
+                console.log('[Records] 普通用户开机日志已记录:', effectiveUser.username);
             } catch (logErr) {
                 console.error('[Records] 记录开机日志失败:', logErr);
             }
@@ -229,18 +242,23 @@ async function handleStop(request, env, user) {
         return error('无效的请求数据', 400);
     }
 
-    const { deviceId } = body;
+    const { deviceId, userId, regionId } = body;
 
     if (!deviceId || typeof deviceId !== 'number') {
         return error('设备 ID 不能为空', 400);
     }
 
-    // ============================================================
-    // 权限校验
-    // ============================================================
-    const permission = await checkDevicePermission(env, deviceId, user);
+    // 权限校验（传入 userId 和 regionId）
+    const permission = await checkDevicePermission(env, deviceId, user, userId, regionId);
     if (!permission.allowed) {
         return error(permission.error, permission.status);
+    }
+
+    // 获取有效用户信息（用于记录操作人）
+    let effectiveUser = user;
+    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
+        const userStmt = env.DB.prepare('SELECT id, username, nickname, role, region_id FROM users WHERE id = ?');
+        effectiveUser = await userStmt.bind(userId).first();
     }
 
     try {
@@ -287,18 +305,16 @@ async function handleStop(request, env, user) {
         `);
         await deviceUpdateStmt.bind(deviceId).run();
 
-        // WxPusher 推送（停机）
         await sendWxPusherNotification(
             env,
             device.name,
             device.tag,
             'stop',
-            user?.nickname || user?.username || '系统',
+            effectiveUser?.nickname || effectiveUser?.username || '系统',
             duration
         );
 
-        // 记录普通用户操作日志
-        if (user && user.role !== 'admin') {
+        if (effectiveUser && effectiveUser.role !== 'admin') {
             try {
                 const logStmt = env.DB.prepare(`
                     INSERT INTO user_operations (device_id, device_name, device_tag, operator_id, operator_name, action, duration_seconds)
@@ -308,12 +324,12 @@ async function handleStop(request, env, user) {
                     deviceId,
                     device.name,
                     device.tag || '',
-                    user.id,
-                    user.nickname || user.username,
+                    effectiveUser.id,
+                    effectiveUser.nickname || effectiveUser.username,
                     'stop',
                     duration
                 ).run();
-                console.log('[Records] 普通用户停机日志已记录:', user.username);
+                console.log('[Records] 普通用户停机日志已记录:', effectiveUser.username);
             } catch (logErr) {
                 console.error('[Records] 记录停机日志失败:', logErr);
             }
@@ -336,17 +352,12 @@ async function handleStop(request, env, user) {
 // ================================================================
 
 async function handleCorrect(request, env, user) {
-    // 允许所有用户操作（注释掉管理员权限检查）
-    // if (!user || user.role !== 'admin') {
-    //     return error('需要管理员权限', 403);
-    // }
-
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
     }
 
-    const { deviceId, mode, startTime, endTime, stopTime, reason } = body;
+    const { deviceId, mode, startTime, endTime, stopTime, reason, userId, regionId } = body;
 
     if (!deviceId || typeof deviceId !== 'number') {
         return error('设备 ID 不能为空', 400);
@@ -356,18 +367,22 @@ async function handleCorrect(request, env, user) {
         return error('请填写原因说明', 400);
     }
 
-    // ============================================================
     // 权限校验（补录/修正也需要校验）
-    // ============================================================
-    const permission = await checkDevicePermission(env, deviceId, user);
+    const permission = await checkDevicePermission(env, deviceId, user, userId, regionId);
     if (!permission.allowed) {
         return error(permission.error, permission.status);
+    }
+
+    // 获取有效用户信息
+    let effectiveUser = user;
+    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
+        const userStmt = env.DB.prepare('SELECT id, username, nickname, role, region_id FROM users WHERE id = ?');
+        effectiveUser = await userStmt.bind(userId).first();
     }
 
     const now = Math.floor(Date.now() / 1000);
 
     try {
-        // 检查设备是否存在
         const deviceStmt = env.DB.prepare(`
             SELECT id, name, tag, status, current_start_time
             FROM devices
@@ -392,7 +407,6 @@ async function handleCorrect(request, env, user) {
                 return error('补录时间不能超过当前时间', 400);
             }
 
-            // 检查时间段是否与已有记录重叠
             const overlapStmt = env.DB.prepare(`
                 SELECT id, start_time, end_time
                 FROM run_records
@@ -428,7 +442,7 @@ async function handleCorrect(request, env, user) {
                 startTime,
                 endTime,
                 duration,
-                user.id,
+                effectiveUser?.id || 'system',
                 1,
                 reason.trim()
             ).run();
@@ -514,27 +528,19 @@ export async function onRequest(context) {
 
     console.log('[Records] 请求路径:', path, '方法:', method);
 
-    // 补录/修正接口
-    if (path.includes('/api/records/correct')) {
-        if (method === 'POST') {
-            return handleCorrect(request, env, user);
-        }
-        return error('方法不允许', 405);
+    // 开机
+    if (path === '/api/records/start' && method === 'POST') {
+        return handleStart(request, env, user);
     }
 
-    if (path.includes('/api/records/')) {
-        if (path.includes('/start')) {
-            if (method === 'POST') {
-                return handleStart(request, env, user);
-            }
-            return error('方法不允许', 405);
-        }
-        if (path.includes('/stop')) {
-            if (method === 'POST') {
-                return handleStop(request, env, user);
-            }
-            return error('方法不允许', 405);
-        }
+    // 停机
+    if (path === '/api/records/stop' && method === 'POST') {
+        return handleStop(request, env, user);
+    }
+
+    // 补录/修正
+    if (path === '/api/records/correct' && method === 'POST') {
+        return handleCorrect(request, env, user);
     }
 
     return error('接口不存在', 404);
