@@ -32,9 +32,6 @@ async function parseJSON(request) {
 // ================================================================
 // WxPusher 推送
 // ================================================================
-// ================================================================
-// WxPusher 推送
-// ================================================================
 async function sendWxPusherNotification(env, deviceName, deviceTag, action, operatorName, duration = null) {
     try {
         const appToken = env.WXPUSHER_APP_TOKEN;
@@ -84,7 +81,7 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
         });
 
         const result = await response.json();
-        if (result.code === 1000) { // 官方文档状态码 1000 表示成功
+        if (result.code === 1000) {
             console.log('[WxPusher] 推送成功:', result);
         } else {
             console.warn('[WxPusher] 推送失败:', result);
@@ -138,9 +135,7 @@ async function handleStart(request, env, user) {
         `);
         await updateStmt.bind(now, deviceId).run();
 
-        // ============================================================
         // WxPusher 推送（开机）
-        // ============================================================
         await sendWxPusherNotification(
             env,
             device.name,
@@ -149,9 +144,7 @@ async function handleStart(request, env, user) {
             user?.nickname || user?.username || '系统'
         );
 
-        // ============================================================
         // 记录普通用户操作日志
-        // ============================================================
         if (user && user.role !== 'admin') {
             try {
                 const logStmt = env.DB.prepare(`
@@ -239,9 +232,7 @@ async function handleStop(request, env, user) {
         `);
         await deviceUpdateStmt.bind(deviceId).run();
 
-        // ============================================================
         // WxPusher 推送（停机）
-        // ============================================================
         await sendWxPusherNotification(
             env,
             device.name,
@@ -251,9 +242,7 @@ async function handleStop(request, env, user) {
             duration
         );
 
-        // ============================================================
         // 记录普通用户操作日志
-        // ============================================================
         if (user && user.role !== 'admin') {
             try {
                 const logStmt = env.DB.prepare(`
@@ -288,6 +277,144 @@ async function handleStop(request, env, user) {
 }
 
 // ================================================================
+// 补录/修正运行记录（管理员专用）
+// ================================================================
+
+async function handleCorrect(request, env, user) {
+    // 只有管理员可以操作
+    if (!user || user.role !== 'admin') {
+        return error('需要管理员权限', 403);
+    }
+
+    const body = await parseJSON(request);
+    if (!body) {
+        return error('无效的请求数据', 400);
+    }
+
+    const { deviceId, mode, startTime, endTime, stopTime, reason } = body;
+
+    if (!deviceId || typeof deviceId !== 'number') {
+        return error('设备 ID 不能为空', 400);
+    }
+
+    if (!reason || reason.trim() === '') {
+        return error('请填写原因说明', 400);
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    try {
+        // 检查设备是否存在
+        const deviceStmt = env.DB.prepare(`
+            SELECT id, name, tag, status, current_start_time
+            FROM devices
+            WHERE id = ? AND is_deleted = 0
+        `);
+        const device = await deviceStmt.bind(deviceId).first();
+        if (!device) {
+            return error('设备不存在', 404);
+        }
+
+        if (mode === 'start') {
+            // ============================================================
+            // 模式1：补录运行（忘开机）
+            // ============================================================
+            if (!startTime || !endTime) {
+                return error('请填写开始时间和结束时间', 400);
+            }
+            if (endTime <= startTime) {
+                return error('结束时间必须大于开始时间', 400);
+            }
+            if (startTime > now || endTime > now) {
+                return error('补录时间不能超过当前时间', 400);
+            }
+
+            const duration = endTime - startTime;
+            const insertStmt = env.DB.prepare(`
+                INSERT INTO run_records (device_id, start_time, end_time, duration_seconds, operator_id, is_corrected, correction_reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `);
+            await insertStmt.bind(
+                deviceId,
+                startTime,
+                endTime,
+                duration,
+                user.id,
+                1,
+                reason.trim()
+            ).run();
+
+            return success({
+                mode: 'start',
+                deviceId,
+                start_time: startTime,
+                end_time: endTime,
+                duration_seconds: duration
+            }, `补录运行成功，时长 ${formatDuration(duration)}`);
+
+        } else if (mode === 'stop') {
+            // ============================================================
+            // 模式2：修正停机（忘停机）
+            // ============================================================
+            if (!stopTime) {
+                return error('请填写实际停机时间', 400);
+            }
+            if (stopTime > now) {
+                return error('停机时间不能超过当前时间', 400);
+            }
+
+            if (device.status === 0) {
+                return error('设备当前已停机，无法修正停机时间', 400);
+            }
+            if (!device.current_start_time) {
+                return error('设备状态异常，无法修正', 400);
+            }
+            if (stopTime <= device.current_start_time) {
+                return error('停机时间必须大于开机时间', 400);
+            }
+
+            const recordStmt = env.DB.prepare(`
+                SELECT id FROM run_records
+                WHERE device_id = ? AND end_time IS NULL
+                ORDER BY start_time DESC LIMIT 1
+            `);
+            const record = await recordStmt.bind(deviceId).first();
+            if (!record) {
+                return error('未找到对应的运行记录', 400);
+            }
+
+            const duration = stopTime - device.current_start_time;
+            const updateStmt = env.DB.prepare(`
+                UPDATE run_records
+                SET end_time = ?, duration_seconds = ?, is_corrected = 1, correction_reason = ?
+                WHERE id = ?
+            `);
+            await updateStmt.bind(stopTime, duration, reason.trim(), record.id).run();
+
+            const deviceUpdateStmt = env.DB.prepare(`
+                UPDATE devices SET status = 0, current_start_time = NULL WHERE id = ?
+            `);
+            await deviceUpdateStmt.bind(deviceId).run();
+
+            return success({
+                mode: 'stop',
+                deviceId,
+                start_time: device.current_start_time,
+                end_time: stopTime,
+                duration_seconds: duration
+            }, `修正停机成功，本次运行 ${formatDuration(duration)}`);
+
+        } else {
+            return error('操作类型错误，请选择 "start" 或 "stop"', 400);
+        }
+
+    } catch (err) {
+        console.error('[Records] 补录/修正失败:', err);
+        return error('操作失败: ' + err.message, 500);
+    }
+}
+
+// ================================================================
 // 路由入口
 // ================================================================
 export async function onRequest(context) {
@@ -297,6 +424,14 @@ export async function onRequest(context) {
     const path = url.pathname;
 
     console.log('[Records] 请求路径:', path, '方法:', method);
+
+    // 补录/修正接口
+    if (path.includes('/api/records/correct')) {
+        if (method === 'POST') {
+            return handleCorrect(request, env, user);
+        }
+        return error('方法不允许', 405);
+    }
 
     if (path.includes('/api/records/')) {
         if (path.includes('/start')) {
@@ -314,4 +449,20 @@ export async function onRequest(context) {
     }
 
     return error('接口不存在', 404);
+}
+
+// ================================================================
+// 辅助函数
+// ================================================================
+
+function formatDuration(seconds) {
+    if (!seconds || seconds < 0) return '0秒';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}小时`);
+    if (minutes > 0) parts.push(`${minutes}分`);
+    if (secs > 0 && hours === 0) parts.push(`${secs}秒`);
+    return parts.join('') || '0秒';
 }
