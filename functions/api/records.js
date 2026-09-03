@@ -30,6 +30,70 @@ async function parseJSON(request) {
 }
 
 // ================================================================
+// WxPusher 推送
+// ================================================================
+async function sendWxPusherNotification(env, deviceName, deviceTag, action, operatorName, duration = null) {
+    try {
+        const appToken = env.WXPUSHER_APP_TOKEN;
+        const uid = env.WXPUSHER_UID;
+
+        if (!appToken || !uid) {
+            console.warn('[WxPusher] 未配置 appToken 或 uid，跳过推送');
+            return;
+        }
+
+        const now = new Date();
+        const timeStr = now.toLocaleString('zh-CN', { hour12: false });
+
+        const actionText = action === 'start' ? '🟢 开机' : '🔴 停机';
+        const durationText = duration !== null ? `\n运行时长：${formatDuration(duration)}` : '';
+
+        const content = `📢 **设备状态变更通知**\n\n` +
+            `设备名称：${deviceName}\n` +
+            `位　　号：${deviceTag || '-'}\n` +
+            `操　　作：${actionText}\n` +
+            `操作人：${operatorName || '系统'}\n` +
+            `操作时间：${timeStr}${durationText}`;
+
+        const pushData = {
+            appToken: appToken,
+            content: content,
+            contentType: 1, // 1=文本
+            uids: [uid]
+        };
+
+        const response = await fetch('https://wxpusher.zjiecode.com/api/send/message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(pushData),
+        });
+
+        const result = await response.json();
+        if (result.success || result.code === 0) {
+            console.log('[WxPusher] 推送成功:', result);
+        } else {
+            console.warn('[WxPusher] 推送失败:', result);
+        }
+    } catch (err) {
+        console.error('[WxPusher] 推送异常:', err);
+    }
+}
+
+function formatDuration(seconds) {
+    if (!seconds || seconds < 0) return '0秒';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}小时`);
+    if (minutes > 0) parts.push(`${minutes}分`);
+    if (secs > 0 && hours === 0) parts.push(`${secs}秒`);
+    return parts.join('') || '0秒';
+}
+
+// ================================================================
 // 开机
 // ================================================================
 async function handleStart(request, env, user) {
@@ -72,6 +136,17 @@ async function handleStart(request, env, user) {
             UPDATE devices SET status = 1, current_start_time = ? WHERE id = ?
         `);
         await updateStmt.bind(now, deviceId).run();
+
+        // ============================================================
+        // WxPusher 推送（开机）
+        // ============================================================
+        await sendWxPusherNotification(
+            env,
+            device.name,
+            device.tag,
+            'start',
+            user?.nickname || user?.username || '系统'
+        );
 
         // ============================================================
         // 记录普通用户操作日志
@@ -162,6 +237,18 @@ async function handleStop(request, env, user) {
             UPDATE devices SET status = 0, current_start_time = NULL WHERE id = ?
         `);
         await deviceUpdateStmt.bind(deviceId).run();
+
+        // ============================================================
+        // WxPusher 推送（停机）
+        // ============================================================
+        await sendWxPusherNotification(
+            env,
+            device.name,
+            device.tag,
+            'stop',
+            user?.nickname || user?.username || '系统',
+            duration
+        );
 
         // ============================================================
         // 记录普通用户操作日志
