@@ -1419,3 +1419,51 @@ body.login-page {
     color: #666;
     background: #f0f0f0;
 }
+
+/* ================================================================
+   补录/修正弹窗样式
+   ================================================================ */
+
+/* 警告按钮 */
+.btn-warning {
+    padding: 10px 20px;
+    border-radius: var(--radius);
+    font-weight: 600;
+    background: #f59e0b;
+    color: #fff;
+    transition: background var(--transition);
+    min-height: 44px;
+    border: none;
+    cursor: pointer;
+}
+.btn-warning:hover {
+    background: #d97706;
+}
+
+/* 模式选择下拉框 */
+#correctMode {
+    cursor: pointer;
+}
+
+/* 补录/修正表单字段切换 */
+#correctStartFields,
+#correctStopFields {
+    transition: all 0.2s;
+}
+
+/* 原因输入框 */
+#correctReason {
+    font-family: inherit;
+    resize: vertical;
+}
+#correctReason:focus {
+    border-color: var(--primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* 禁用状态的输入框 */
+#correctStartTimeDisplay {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
