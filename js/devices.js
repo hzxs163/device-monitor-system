@@ -1,11 +1,12 @@
 /**
  * ================================================================
  * 设备运行监控系统 - 前端设备管理模块
- * 功能：加载设备、渲染卡片、类型标签、搜索、分页
+ * 功能：加载设备、渲染卡片、类型标签、搜索、分页、区域过滤
  * ================================================================
  */
 
 import { get, showToast, formatDuration, DEFAULT_PAGE_SIZE } from './utils.js';
+import { getUserRegionId, getUserRegionName, isAdminSync, getCurrentUserSync } from './auth.js';
 
 // ================================================================
 // 状态
@@ -19,18 +20,41 @@ let currentPage = 1;
 let typeList = [];
 let selectedDeviceId = null;
 let onDeviceChange = null;
+let currentRegionId = 'all'; // 'all' 或具体区域ID
 
 // 每页数量
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 const pageSize = DEFAULT_PAGE_SIZE;
 
 // ================================================================
-// 1. 加载设备列表
+// 1. 加载设备列表（支持区域过滤）
 // ================================================================
 
 export async function loadDevices(silent = false) {
     try {
-        const result = await get('/devices');
+        // 获取当前用户信息
+        const user = getCurrentUserSync();
+        const isAdmin = isAdminSync();
+        
+        // 构建查询参数
+        let url = '/devices';
+        const params = new URLSearchParams();
+        
+        // 管理员：如果有区域筛选则传递 regionId
+        if (isAdmin && currentRegionId && currentRegionId !== 'all') {
+            params.append('regionId', currentRegionId);
+        }
+        
+        // 传递 userId 用于后端权限判断
+        if (user && user.id) {
+            params.append('userId', user.id);
+        }
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+
+        const result = await get(url);
 
         if (!result.success) {
             if (!silent) {
@@ -40,13 +64,16 @@ export async function loadDevices(silent = false) {
             filteredDevices = [];
             window.__devices = [];
             window.__allTypes = [];
+            window.__allRegions = [];
             return [];
         }
 
         allDevices = result.data?.devices || [];
         typeList = result.data?.types || [];
+        const regions = result.data?.regions || [];
         window.__devices = allDevices;
         window.__allTypes = typeList;
+        window.__allRegions = regions;
         applyFilters();
         return allDevices;
     } catch (error) {
@@ -58,6 +85,7 @@ export async function loadDevices(silent = false) {
         filteredDevices = [];
         window.__devices = [];
         window.__allTypes = [];
+        window.__allRegions = [];
         return [];
     }
 }
@@ -67,7 +95,35 @@ export async function reloadDevices() {
 }
 
 // ================================================================
-// 2. 筛选逻辑
+// 2. 设置区域筛选
+// ================================================================
+
+export function setRegionFilter(regionId) {
+    currentRegionId = regionId || 'all';
+    currentPage = 1;
+    // 重新加载设备
+    loadDevices().then(() => {
+        renderAll();
+        renderTypeTabs();
+        // 触发统计刷新
+        if (typeof window.loadStatistics === 'function') {
+            window.loadStatistics().then(() => {
+                if (typeof window.renderTypeSummary === 'function') {
+                    window.renderTypeSummary();
+                }
+                if (typeof window.renderRankTable === 'function') {
+                    window.renderRankTable();
+                }
+                if (typeof window.updateStatsBar === 'function') {
+                    window.updateStatsBar();
+                }
+            });
+        }
+    });
+}
+
+// ================================================================
+// 3. 筛选逻辑
 // ================================================================
 
 function applyFilters() {
@@ -118,7 +174,7 @@ export function filterDevices(keyword) {
 }
 
 // ================================================================
-// 3. 分页
+// 4. 分页
 // ================================================================
 
 export function getTotalPages() {
@@ -134,7 +190,7 @@ export function goToPage(page) {
 }
 
 // ================================================================
-// 4. 渲染函数
+// 5. 渲染函数
 // ================================================================
 
 export function renderAll() {
@@ -148,13 +204,18 @@ export function renderDevices() {
     if (!grid) return;
 
     const devices = getCurrentPageDevices();
+    const isAdmin = isAdminSync();
+    const userRegionName = getUserRegionName();
 
     if (devices.length === 0) {
+        const emptyMsg = isAdmin 
+            ? '暂无设备，请添加设备或调整筛选条件'
+            : `当前区域（${userRegionName}）暂无设备`;
         grid.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">📭</div>
                 <p class="empty-text">暂无设备</p>
-                <p class="empty-hint">请添加设备或调整筛选条件</p>
+                <p class="empty-hint">${emptyMsg}</p>
             </div>
         `;
         return;
@@ -175,78 +236,14 @@ export function renderDevices() {
         `;
 
         devices.forEach(device => {
-            const isRunning = device.status === 1;
-            const statusText = isRunning ? '运行中' : '已停机';
-            const statusClass = isRunning ? 'running' : 'stopped';
-            const currentDuration = isRunning && device.current_start_time
-                ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
-                : '--';
-            const monthlyHours = device.monthly_hours || 0;
-            const monthlyText = monthlyHours > 0 ? `${monthlyHours}小时` : '0小时';
-
-            const actionBtn = isRunning
-                ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
-                : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
-
-            html += `
-                <div class="device-card ${statusClass}" data-id="${device.id}" style="cursor:pointer;">
-                    <div class="card-row">
-                        <span class="device-name">${escapeHtml(device.name)}</span>
-                        <span class="device-status">
-                            <span class="status-dot ${statusClass}"></span>
-                            ${statusText}
-                        </span>
-                    </div>
-                    <div class="card-row">
-                        <span class="device-tag">位号: ${escapeHtml(device.tag || '-')}</span>
-                        <span class="device-type">${escapeHtml(device.type || '未分类')}</span>
-                    </div>
-                    <div class="card-row">
-                        <span class="device-tag">型号: ${escapeHtml(device.model || '-')}</span>
-                    </div>
-                    <div class="card-row">
-                        <span class="device-duration" style="display:flex;justify-content:space-between;font-size:var(--text-sm);gap:12px;">
-                            <span>本月运行: ${monthlyText}</span>
-                            <span>本次运行: ${currentDuration}</span>
-                        </span>
-                    </div>
-                    <div class="card-actions">
-                        ${actionBtn}
-                    </div>
-                </div>
-            `;
+            html += renderDeviceCard(device, isAdmin);
         });
 
         html += `</div>`;
         grid.innerHTML = html;
 
-        // 绑定卡片按钮事件
-        grid.querySelectorAll('[data-action]').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const deviceId = parseInt(btn.dataset.id);
-                const action = btn.dataset.action;
-                if (action === 'start') {
-                    handleStart(deviceId);
-                } else if (action === 'stop') {
-                    handleStop(deviceId);
-                }
-            });
-        });
-
-        // 绑定卡片双击事件（排除按钮点击）
-        grid.querySelectorAll('.device-card').forEach(card => {
-            card.addEventListener('dblclick', function(e) {
-                if (e.target.closest('.btn-start') || e.target.closest('.btn-stop')) {
-                    return;
-                }
-                const deviceId = parseInt(this.dataset.id);
-                if (typeof window.showDeviceDetail === 'function') {
-                    window.showDeviceDetail(deviceId);
-                }
-            });
-        });
-
+        // 绑定事件
+        bindDeviceEvents(grid);
         return;
     }
 
@@ -301,48 +298,7 @@ export function renderDevices() {
         `;
 
         typeDevices.forEach(device => {
-            const isRunning = device.status === 1;
-            const statusText = isRunning ? '运行中' : '已停机';
-            const statusClass = isRunning ? 'running' : 'stopped';
-
-            const currentDuration = isRunning && device.current_start_time
-                ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
-                : '--';
-
-            const monthlyHours = device.monthly_hours || 0;
-            const monthlyText = monthlyHours > 0 ? `${monthlyHours}小时` : '0小时';
-
-            const actionBtn = isRunning
-                ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
-                : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
-
-            html += `
-                <div class="device-card ${statusClass}" data-id="${device.id}" style="cursor:pointer;">
-                    <div class="card-row">
-                        <span class="device-name">${escapeHtml(device.name)}</span>
-                        <span class="device-status">
-                            <span class="status-dot ${statusClass}"></span>
-                            ${statusText}
-                        </span>
-                    </div>
-                    <div class="card-row">
-                        <span class="device-tag">位号: ${escapeHtml(device.tag || '-')}</span>
-                        <span class="device-type">${escapeHtml(device.type || '未分类')}</span>
-                    </div>
-                    <div class="card-row">
-                        <span class="device-tag">型号: ${escapeHtml(device.model || '-')}</span>
-                    </div>
-                    <div class="card-row">
-                        <span class="device-duration" style="display:flex;justify-content:space-between;font-size:var(--text-sm);gap:12px;">
-                            <span>本月运行: ${monthlyText}</span>
-                            <span>本次运行: ${currentDuration}</span>
-                        </span>
-                    </div>
-                    <div class="card-actions">
-                        ${actionBtn}
-                    </div>
-                </div>
-            `;
+            html += renderDeviceCard(device, isAdmin);
         });
 
         html += `
@@ -353,6 +309,69 @@ export function renderDevices() {
 
     grid.innerHTML = html;
 
+    // 绑定事件
+    bindDeviceEvents(grid);
+}
+
+/**
+ * 渲染单张设备卡片
+ */
+function renderDeviceCard(device, isAdmin) {
+    const isRunning = device.status === 1;
+    const statusText = isRunning ? '运行中' : '已停机';
+    const statusClass = isRunning ? 'running' : 'stopped';
+
+    const currentDuration = isRunning && device.current_start_time
+        ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
+        : '--';
+
+    const monthlyHours = device.monthly_hours || 0;
+    const monthlyText = monthlyHours > 0 ? `${monthlyHours}小时` : '0小时';
+
+    const actionBtn = isRunning
+        ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
+        : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
+
+    // 区域标签：管理员显示所有设备的区域，普通用户不显示（都是自己区域的）
+    const showRegion = isAdmin && device.region_name;
+    const regionTag = showRegion 
+        ? `<span class="device-region" style="font-size:11px;color:#64748b;background:#f1f4f9;padding:1px 8px;border-radius:10px;">${escapeHtml(device.region_name)}</span>`
+        : '';
+
+    return `
+        <div class="device-card ${statusClass}" data-id="${device.id}" style="cursor:pointer;">
+            <div class="card-row">
+                <span class="device-name">${escapeHtml(device.name)}</span>
+                <span class="device-status">
+                    <span class="status-dot ${statusClass}"></span>
+                    ${statusText}
+                </span>
+            </div>
+            <div class="card-row">
+                <span class="device-tag">位号: ${escapeHtml(device.tag || '-')}</span>
+                <span class="device-type">${escapeHtml(device.type || '未分类')}</span>
+            </div>
+            <div class="card-row">
+                <span class="device-tag">型号: ${escapeHtml(device.model || '-')}</span>
+                ${regionTag}
+            </div>
+            <div class="card-row">
+                <span class="device-duration" style="display:flex;justify-content:space-between;font-size:var(--text-sm);gap:12px;">
+                    <span>本月运行: ${monthlyText}</span>
+                    <span>本次运行: ${currentDuration}</span>
+                </span>
+            </div>
+            <div class="card-actions">
+                ${actionBtn}
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * 绑定设备卡片事件
+ */
+function bindDeviceEvents(grid) {
     // 绑定卡片双击事件（排除按钮点击）
     grid.querySelectorAll('.device-card').forEach(card => {
         card.addEventListener('dblclick', function(e) {
@@ -384,6 +403,10 @@ export function renderDevices() {
 export function renderTypeTabs() {
     const container = document.getElementById('typeTabs');
     if (!container) return;
+
+    // 获取当前区域显示名称
+    const regionName = getUserRegionName();
+    const isAdmin = isAdminSync();
 
     const types = getAllTypes();
 
@@ -424,12 +447,19 @@ export function renderDeviceCount() {
     if (el) {
         const total = allDevices.filter(d => !d.is_deleted).length;
         const filtered = filteredDevices.length;
-        el.textContent = filtered === total ? `共 ${total} 台` : `共 ${filtered} / ${total} 台`;
+        const regionName = getUserRegionName();
+        const isAdmin = isAdminSync();
+        
+        // 普通用户显示区域信息
+        const regionInfo = isAdmin ? '' : ` 📍 ${regionName}`;
+        el.textContent = filtered === total 
+            ? `共 ${total} 台${regionInfo}` 
+            : `共 ${filtered} / ${total} 台${regionInfo}`;
     }
 }
 
 // ================================================================
-// 5. 辅助函数
+// 6. 辅助函数
 // ================================================================
 
 function getAllTypes() {
@@ -480,7 +510,7 @@ function escapeHtml(text) {
 }
 
 // ================================================================
-// 6. 操作处理（开机/停机）
+// 7. 操作处理（开机/停机）
 // ================================================================
 
 async function handleStart(deviceId) {
@@ -494,7 +524,7 @@ async function handleStop(deviceId) {
 }
 
 // ================================================================
-// 7. 设备状态更新（只更新单张卡片，不重新渲染全部）
+// 8. 设备状态更新（只更新单张卡片，不重新渲染全部）
 // ================================================================
 
 export function updateDeviceLocal(deviceId, updates) {
@@ -577,7 +607,15 @@ export function onDeviceChangeCallback(callback) {
 }
 
 // ================================================================
-// 8. 导出
+// 9. 获取当前区域ID（用于其他模块）
+// ================================================================
+
+export function getCurrentRegionId() {
+    return currentRegionId;
+}
+
+// ================================================================
+// 10. 导出
 // ================================================================
 
 export {
@@ -588,6 +626,7 @@ export {
     pageSize,
     searchKeyword,
     typeList,
+    currentRegionId,
 };
 
 export default {
@@ -605,10 +644,13 @@ export default {
     goToPage,
     updateDeviceLocal,
     onDeviceChangeCallback,
+    setRegionFilter,
+    getCurrentRegionId,
     allDevices,
     filteredDevices,
     currentType,
     currentPage,
     searchKeyword,
     typeList,
+    currentRegionId,
 };
