@@ -60,7 +60,7 @@ export async function startDevice(deviceId) {
 
     try {
         // 请求时带上 userId 和 regionId
-        const result = await post('/api/records/start', {
+        const result = await post('/records/start', {
             deviceId,
             userId: user.id,
             regionId: user.region_id
@@ -133,7 +133,7 @@ export async function stopDevice(deviceId) {
 
     try {
         // 请求时带上 userId 和 regionId
-        const result = await post('/api/records/stop', {
+        const result = await post('/records/stop', {
             deviceId,
             userId: user.id,
             regionId: user.region_id
