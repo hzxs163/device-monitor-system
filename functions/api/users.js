@@ -24,15 +24,18 @@ export async function onRequestGet({ env, user }) {
     try {
         const stmt = env.DB.prepare(`
             SELECT
-                id,
-                username,
-                nickname,
-                role,
-                is_active,
-                created_at,
-                created_by
-            FROM users
-            ORDER BY created_at ASC
+                u.id,
+                u.username,
+                u.nickname,
+                u.role,
+                u.is_active,
+                u.created_at,
+                u.created_by,
+                u.region_id,
+                r.name as region_name
+            FROM users u
+            LEFT JOIN regions r ON u.region_id = r.id
+            ORDER BY u.created_at ASC
         `);
         const result = await stmt.all();
 
@@ -60,7 +63,7 @@ export async function onRequestPost({ request, env, user }) {
         return error('无效的请求数据', 400);
     }
 
-    const { username, nickname, password, role } = body;
+    const { username, nickname, password, role, region_id } = body;
 
     // 参数校验
     if (!username || username.trim() === '') {
@@ -81,6 +84,22 @@ export async function onRequestPost({ request, env, user }) {
         return error('密码长度至少 4 位', 400);
     }
 
+    // 非管理员必须选择区域
+    const finalRole = role === 'admin' ? 'admin' : 'user';
+    if (finalRole !== 'admin') {
+        if (!region_id) {
+            return error('普通用户必须选择所属区域', 400);
+        }
+        // 检查区域是否存在
+        const regionCheck = env.DB.prepare(`
+            SELECT id FROM regions WHERE id = ?
+        `);
+        const regionExists = await regionCheck.bind(parseInt(region_id)).first();
+        if (!regionExists) {
+            return error('所选区域不存在', 400);
+        }
+    }
+
     try {
         // 检查用户名是否已存在
         const checkStmt = env.DB.prepare(`
@@ -97,12 +116,12 @@ export async function onRequestPost({ request, env, user }) {
         // 生成用户 ID
         const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-        // 插入用户
+        // 插入用户（包含 region_id）
         const insertStmt = env.DB.prepare(`
             INSERT INTO users (
                 id, username, nickname, password_hash, password_salt,
-                role, is_active, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                role, is_active, created_by, region_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         await insertStmt.bind(
             userId,
@@ -110,16 +129,18 @@ export async function onRequestPost({ request, env, user }) {
             nickname.trim(),
             hash,
             salt,
-            role === 'admin' ? 'admin' : 'user',
+            finalRole,
             1, // 默认启用
-            user.id
+            user.id,
+            finalRole === 'admin' ? null : parseInt(region_id)
         ).run();
 
         return success({
             id: userId,
             username: username.trim(),
             nickname: nickname.trim(),
-            role: role === 'admin' ? 'admin' : 'user',
+            role: finalRole,
+            region_id: finalRole === 'admin' ? null : parseInt(region_id),
         }, '用户添加成功');
     } catch (err) {
         console.error('[Users] 添加失败:', err);
@@ -149,12 +170,12 @@ export async function onRequestPut({ request, env, user, params }) {
         return error('无效的请求数据', 400);
     }
 
-    const { nickname, role, password } = body;
+    const { nickname, role, password, region_id } = body;
 
     try {
         // 检查用户是否存在
         const checkStmt = env.DB.prepare(`
-            SELECT id FROM users WHERE id = ?
+            SELECT id, role FROM users WHERE id = ?
         `);
         const existing = await checkStmt.bind(userId).first();
         if (!existing) {
@@ -170,9 +191,35 @@ export async function onRequestPut({ request, env, user, params }) {
             values.push(nickname.trim());
         }
 
+        // 处理角色变更
+        let finalRole = existing.role;
         if (role && (role === 'admin' || role === 'user')) {
+            finalRole = role;
             updates.push('role = ?');
-            values.push(role);
+            values.push(finalRole);
+        }
+
+        // 处理区域变更
+        const isAdmin = finalRole === 'admin';
+        if (isAdmin) {
+            // 管理员：region_id 设为 NULL
+            updates.push('region_id = ?');
+            values.push(null);
+        } else {
+            // 普通用户：必须选择区域
+            if (!region_id) {
+                return error('普通用户必须选择所属区域', 400);
+            }
+            // 检查区域是否存在
+            const regionCheck = env.DB.prepare(`
+                SELECT id FROM regions WHERE id = ?
+            `);
+            const regionExists = await regionCheck.bind(parseInt(region_id)).first();
+            if (!regionExists) {
+                return error('所选区域不存在', 400);
+            }
+            updates.push('region_id = ?');
+            values.push(parseInt(region_id));
         }
 
         if (password && password.trim() !== '') {
