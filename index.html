@@ -777,14 +777,21 @@
                     </div>
 
                     <form id="correctForm">
-                        <!-- 操作类型选择 -->
+                        <!-- 操作类型选择 - 分段按钮 -->
                         <div class="form-group">
                             <label>操作类型 *</label>
-                            <select id="correctMode" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                                <option value="start" selected>补录运行（忘点开机，补录完整运行区间）</option>
-                                <option value="stop" ${isRunning ? 'selected' : 'disabled'}>修正停机（忘点停机，修正实际停机时间）</option>
-                            </select>
+                            <div style="display:flex;border-radius:8px;overflow:hidden;border:2px solid #e2e8f0;">
+                                <button type="button" id="modeStartBtn" style="flex:1;padding:10px 8px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.2s;min-height:44px;">
+                                    📝 补录运行
+                                    <div style="font-size:11px;font-weight:400;opacity:0.8;">忘点开机</div>
+                                </button>
+                                <button type="button" id="modeStopBtn" style="flex:1;padding:10px 8px;border:none;background:#f1f4f9;color:#94a3b8;font-size:14px;font-weight:500;cursor:${isRunning ? 'pointer' : 'not-allowed'};transition:all 0.2s;min-height:44px;${!isRunning ? 'opacity:0.5;' : ''}">
+                                    ⏹ 修正停机
+                                    <div style="font-size:11px;font-weight:400;opacity:0.8;">忘点停机</div>
+                                </button>
+                            </div>
                             ${!isRunning ? '<div style="font-size:12px;color:#94a3b8;margin-top:4px;">⚠️ 设备已停机，无法选择"修正停机"</div>' : ''}
+                            <input type="hidden" id="correctMode" value="start" />
                         </div>
 
                         <!-- 补录运行模式（start） -->
@@ -834,23 +841,32 @@
             window.openModal(html);
 
             // ============================================================
-            // 模式切换
+            // 模式切换（分段按钮）
             // ============================================================
-            const modeSelect = document.getElementById('correctMode');
+            const modeStartBtn = document.getElementById('modeStartBtn');
+            const modeStopBtn = document.getElementById('modeStopBtn');
+            const modeHidden = document.getElementById('correctMode');
             const startFields = document.getElementById('correctStartFields');
             const stopFields = document.getElementById('correctStopFields');
             const startTimeDisplay = document.getElementById('correctStartTimeDisplay');
 
-            modeSelect.addEventListener('change', function() {
-                if (this.value === 'start') {
+            function setMode(mode) {
+                modeHidden.value = mode;
+                if (mode === 'start') {
+                    modeStartBtn.style.background = '#2563eb';
+                    modeStartBtn.style.color = '#fff';
+                    modeStopBtn.style.background = '#f1f4f9';
+                    modeStopBtn.style.color = '#94a3b8';
                     startFields.style.display = 'block';
                     stopFields.style.display = 'none';
-                    // 补录模式：开机时间可编辑
                     document.getElementById('correctStartTime').disabled = false;
                 } else {
+                    modeStartBtn.style.background = '#f1f4f9';
+                    modeStartBtn.style.color = '#94a3b8';
+                    modeStopBtn.style.background = '#2563eb';
+                    modeStopBtn.style.color = '#fff';
                     startFields.style.display = 'none';
                     stopFields.style.display = 'block';
-                    // 修正停机模式：开机时间自动填充并禁用
                     if (device.current_start_time) {
                         startTimeDisplay.value = formatTimestamp(device.current_start_time, 'datetime');
                     } else {
@@ -858,6 +874,17 @@
                     }
                     startTimeDisplay.disabled = true;
                 }
+            }
+
+            modeStartBtn.addEventListener('click', function() {
+                if (this.style.background === '#2563eb') return;
+                setMode('start');
+            });
+
+            modeStopBtn.addEventListener('click', function() {
+                if (!isRunning) return;
+                if (this.style.background === '#2563eb') return;
+                setMode('stop');
             });
 
             // ============================================================
@@ -870,10 +897,15 @@
             document.getElementById('correctStartTime').value = todayStr;
             document.getElementById('correctEndTime').value = nowStr;
             document.getElementById('correctStopTime').value = nowStr;
+
             // ============================================================
-            // 新增：手动触发一次模式切换，让初始状态生效
+            // 默认选中（设备运行中默认修正停机，否则默认补录运行）
             // ============================================================
-            modeSelect.dispatchEvent(new Event('change'));
+            if (isRunning) {
+                setMode('stop');
+            } else {
+                setMode('start');
+            }
 
             // ============================================================
             // 表单提交
