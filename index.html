@@ -955,6 +955,10 @@
                             <input type="text" id="inlineDevTag" placeholder="如：A-005" required />
                         </div>
                         <div class="form-group">
+                            <label>型号</label>
+                            <input type="text" id="inlineDevModel" placeholder="如：XZ-200" />
+                        </div>
+                        <div class="form-group">
                             <label>设备类型 *</label>
                             <select id="inlineDevType">${typeOptions}</select>
                         </div>
@@ -976,6 +980,7 @@
                 e.preventDefault();
                 const name = document.getElementById('inlineDevName').value.trim();
                 const tag = document.getElementById('inlineDevTag').value.trim();
+                const model = document.getElementById('inlineDevModel').value.trim();
                 const type = document.getElementById('inlineDevType').value;
                 const location = document.getElementById('inlineDevLocation').value.trim();
 
@@ -988,7 +993,7 @@
                     const res = await fetch('/api/devices', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name, tag, type, location })
+                        body: JSON.stringify({ name, tag, model, type, location })
                     });
                     const result = await res.json();
                     if (result.success) {
