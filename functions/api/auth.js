@@ -77,12 +77,24 @@ async function handleLogin(request, env) {
         username: user.username,
         nickname: user.nickname || user.username,
         role: user.role || 'user',
-        region_id: isAdmin ? null : user.region_id,      // 管理员为 null
-        region_name: isAdmin ? '全部区域' : (user.region_name || '未分配'),  // 管理员显示"全部区域"
+        region_id: isAdmin ? null : user.region_id,
+        region_name: isAdmin ? '全部区域' : (user.region_name || '未分配'),
         is_admin: isAdmin,
     };
 
-    const token = await signJWT(userData, env);
+    // ============================================================
+    // 关键修复：signJWT 传入的数据必须包含 region_id
+    // ============================================================
+    const token = await signJWT(
+        {
+            id: user.id,
+            username: user.username,
+            nickname: user.nickname || user.username,
+            role: user.role || 'user',
+            region_id: isAdmin ? null : user.region_id,   // ← 加上这一行
+        },
+        env
+    );
 
     // 去掉 Secure 属性
     const cookie = `token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${60 * 60 * 24 * 7}`;
