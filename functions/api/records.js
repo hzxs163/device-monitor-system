@@ -30,6 +30,48 @@ async function parseJSON(request) {
 }
 
 // ================================================================
+// 权限校验：检查用户是否有权限操作该设备
+// ================================================================
+async function checkDevicePermission(env, deviceId, user) {
+    if (!user) {
+        return { allowed: false, error: '请先登录', status: 401 };
+    }
+
+    // 管理员：允许操作所有设备
+    if (user.role === 'admin') {
+        return { allowed: true, device: null };
+    }
+
+    // 普通用户：检查设备是否属于该用户所在区域
+    try {
+        const deviceStmt = env.DB.prepare(`
+            SELECT id, name, tag, region_id
+            FROM devices
+            WHERE id = ? AND is_deleted = 0
+        `);
+        const device = await deviceStmt.bind(deviceId).first();
+
+        if (!device) {
+            return { allowed: false, error: '设备不存在', status: 404 };
+        }
+
+        // 检查设备是否属于用户区域
+        if (device.region_id !== user.region_id) {
+            return { 
+                allowed: false, 
+                error: '您没有权限操作该区域的设备', 
+                status: 403 
+            };
+        }
+
+        return { allowed: true, device };
+    } catch (err) {
+        console.error('[Records] 权限校验失败:', err);
+        return { allowed: false, error: '权限校验失败', status: 500 };
+    }
+}
+
+// ================================================================
 // WxPusher 推送
 // ================================================================
 async function sendWxPusherNotification(env, deviceName, deviceTag, action, operatorName, duration = null) {
@@ -48,10 +90,8 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
         const actionText = action === 'start' ? '🟢 开机' : '🔴 停机';
         const durationText = duration !== null ? `，运行 ${formatDuration(duration)}` : '';
 
-        // 1. 摘要（就是通知栏显示的标题）
         const summary = `【设备监控】${deviceName} ${actionText}`;
 
-        // 2. 正文内容：使用 HTML 格式，更清晰
         const content = `
             <div style="font-size: 14px; line-height: 1.8; padding: 8px 0;">
                 <p><strong>设备名称</strong>：${deviceName}</p>
@@ -62,16 +102,14 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
             </div>
         `;
 
-        // 3. 构建符合文档规范的请求体
         const pushData = {
             appToken: appToken,
-            summary: summary,          // 标题
-            content: content,          // 正文（HTML格式）
-            contentType: 2,            // 2 表示 HTML 格式
+            summary: summary,
+            content: content,
+            contentType: 2,
             uids: [uid]
         };
 
-        // 4. 发送请求（日志等不变）
         const response = await fetch('https://wxpusher.zjiecode.com/api/send/message', {
             method: 'POST',
             headers: {
@@ -106,7 +144,16 @@ async function handleStart(request, env, user) {
         return error('设备 ID 不能为空', 400);
     }
 
+    // ============================================================
+    // 权限校验
+    // ============================================================
+    const permission = await checkDevicePermission(env, deviceId, user);
+    if (!permission.allowed) {
+        return error(permission.error, permission.status);
+    }
+
     try {
+        // 获取设备信息（权限校验已查过一次，但重新查一次确保最新状态）
         const deviceStmt = env.DB.prepare(`
             SELECT id, name, tag, status, current_start_time
             FROM devices
@@ -186,6 +233,14 @@ async function handleStop(request, env, user) {
 
     if (!deviceId || typeof deviceId !== 'number') {
         return error('设备 ID 不能为空', 400);
+    }
+
+    // ============================================================
+    // 权限校验
+    // ============================================================
+    const permission = await checkDevicePermission(env, deviceId, user);
+    if (!permission.allowed) {
+        return error(permission.error, permission.status);
     }
 
     try {
@@ -301,6 +356,14 @@ async function handleCorrect(request, env, user) {
         return error('请填写原因说明', 400);
     }
 
+    // ============================================================
+    // 权限校验（补录/修正也需要校验）
+    // ============================================================
+    const permission = await checkDevicePermission(env, deviceId, user);
+    if (!permission.allowed) {
+        return error(permission.error, permission.status);
+    }
+
     const now = Math.floor(Date.now() / 1000);
 
     try {
@@ -329,9 +392,7 @@ async function handleCorrect(request, env, user) {
                 return error('补录时间不能超过当前时间', 400);
             }
 
-            // ============================================================
-            // 新增：检查时间段是否与已有记录重叠（防重复补录）
-            // ============================================================
+            // 检查时间段是否与已有记录重叠
             const overlapStmt = env.DB.prepare(`
                 SELECT id, start_time, end_time
                 FROM run_records
