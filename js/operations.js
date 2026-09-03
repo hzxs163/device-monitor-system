@@ -7,6 +7,7 @@
 
 import { post, showToast } from './utils.js';
 import { updateDeviceLocal } from './devices.js';
+import { getCurrentUserSync } from './auth.js';
 
 // ================================================================
 // 状态
@@ -48,10 +49,22 @@ export async function startDevice(deviceId) {
         return { success: false };
     }
 
+    // 获取当前用户信息
+    const user = getCurrentUserSync();
+    if (!user) {
+        showToast('请先登录', 'error');
+        return { success: false };
+    }
+
     operatingSet.add(deviceId);
 
     try {
-        const result = await post('/records/start', { deviceId });
+        // 请求时带上 userId 和 regionId
+        const result = await post('/records/start', {
+            deviceId,
+            userId: user.id,
+            regionId: user.region_id
+        });
 
         if (!result.success) {
             showToast(result.error || '开机失败', 'error');
@@ -109,10 +122,22 @@ export async function stopDevice(deviceId) {
         return { success: false };
     }
 
+    // 获取当前用户信息
+    const user = getCurrentUserSync();
+    if (!user) {
+        showToast('请先登录', 'error');
+        return { success: false };
+    }
+
     operatingSet.add(deviceId);
 
     try {
-        const result = await post('/records/stop', { deviceId });
+        // 请求时带上 userId 和 regionId
+        const result = await post('/records/stop', {
+            deviceId,
+            userId: user.id,
+            regionId: user.region_id
+        });
 
         if (!result.success) {
             showToast(result.error || '停机失败', 'error');
