@@ -171,7 +171,7 @@ export function renderDevices() {
             <div style="padding:8px 4px 16px 4px;font-size:14px;color:#94a3b8;">
                 找到 ${devices.length} 台设备
             </div>
-            <div style="display:grid;gap:12px;grid-template-columns:1fr;">
+            <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));">
         `;
 
         devices.forEach(device => {
