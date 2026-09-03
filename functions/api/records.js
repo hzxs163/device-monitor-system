@@ -48,27 +48,33 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
         const now = new Date();
         const timeStr = now.toLocaleString('zh-CN', { hour12: false });
 
-        const actionText = action === 'start' ? '开机' : '停机';
-        const durationText = duration !== null ? `\n运行时长：${formatDuration(duration)}` : '';
+        const actionText = action === 'start' ? '开机 ✅' : '停机 ⏹️';
+        const durationText = duration !== null ? `，运行 ${formatDuration(duration)}` : '';
 
-        // 标题：单独设置，不包含在 content 中
-        const title = `【设备监控】${deviceName} ${actionText}`;
+        // 1. 摘要（就是通知栏显示的标题）
+        const summary = `【设备监控】${deviceName} ${actionText}`;
 
-        // 内容：纯参数，不包含标题行
-        const content = `设备名称：${deviceName}\n` +
-            `位　　号：${deviceTag || '-'}\n` +
-            `操　　作：${actionText}\n` +
-            `操作人：${operatorName || '系统'}\n` +
-            `操作时间：${timeStr}${durationText}`;
+        // 2. 正文内容：使用 HTML 格式，更清晰
+        const content = `
+            <div style="font-size: 14px; line-height: 1.8; padding: 8px 0;">
+                <p><strong>设备名称</strong>：${deviceName}</p>
+                <p><strong>位　　号</strong>：${deviceTag || '-'}</p>
+                <p><strong>操　　作</strong>：${actionText}</p>
+                <p><strong>操作人</strong>：${operatorName || '系统'}</p>
+                <p><strong>操作时间</strong>：${timeStr}${durationText}</p>
+            </div>
+        `;
 
+        // 3. 构建符合文档规范的请求体
         const pushData = {
             appToken: appToken,
-            title: title,
-            content: content,
-            contentType: 1,
+            summary: summary,          // 标题
+            content: content,          // 正文（HTML格式）
+            contentType: 2,            // 2 表示 HTML 格式
             uids: [uid]
         };
 
+        // 4. 发送请求（日志等不变）
         const response = await fetch('https://wxpusher.zjiecode.com/api/send/message', {
             method: 'POST',
             headers: {
@@ -78,7 +84,7 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
         });
 
         const result = await response.json();
-        if (result.success || result.code === 0) {
+        if (result.code === 1000) { // 官方文档状态码 1000 表示成功
             console.log('[WxPusher] 推送成功:', result);
         } else {
             console.warn('[WxPusher] 推送失败:', result);
