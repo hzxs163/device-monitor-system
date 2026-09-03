@@ -1300,10 +1300,21 @@
                             <label>位置</label>
                             <input type="text" id="inlineDevLocation" placeholder="如：车间A" />
                         </div>
-                        <div class="form-group">
-                            <label>所属区域 *</label>
-                            <select id="inlineDevRegion">${regionOptions}</select>
-                        </div>
+<div class="form-group">
+    <label>所属区域 *</label>
+    <div id="inlineDevRegionGroup" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        ${regions.map(r => `
+            <button type="button" 
+                    class="region-option-btn" 
+                    data-value="${r.id}"
+                    style="padding:8px 16px;border:2px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;transition:all 0.2s;"
+                    onclick="window.selectRegion(this, 'inlineDevRegion')">
+                ${r.name}
+            </button>
+        `).join('')}
+    </div>
+    <input type="hidden" id="inlineDevRegion" value="" />
+</div>
                         <div class="modal-actions">
                             <button type="button" class="btn btn-secondary" onclick="window.closeModal()">取消</button>
                             <button type="submit" class="btn btn-primary">确认添加</button>
@@ -1400,10 +1411,21 @@ window._inlineEditDevice = async function(deviceId) {
                     <label>位置</label>
                     <input type="text" id="inlineEditDevLocation" value="${escapeHtml(device.location || '')}" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" />
                 </div>
-                <div class="form-group">
-                    <label>所属区域 *</label>
-                    <select id="inlineEditDevRegion" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff;appearance:auto;min-height:44px;box-sizing:border-box;">${regionOptions}</select>
-                </div>
+<div class="form-group">
+    <label>所属区域 *</label>
+    <div id="inlineEditDevRegionGroup" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        ${regions.map(r => `
+            <button type="button" 
+                    class="region-option-btn" 
+                    data-value="${r.id}"
+                    style="padding:8px 16px;border:2px solid ${r.id === device.region_id ? '#2563eb' : '#e2e8f0'};border-radius:8px;background:${r.id === device.region_id ? '#eff6ff' : '#fff'};cursor:pointer;font-size:14px;transition:all 0.2s;color:${r.id === device.region_id ? '#2563eb' : '#1e293b'};"
+                    onclick="window.selectRegion(this, 'inlineEditDevRegion')">
+                ${r.name}
+            </button>
+        `).join('')}
+    </div>
+    <input type="hidden" id="inlineEditDevRegion" value="${device.region_id || ''}" />
+</div>
                 <div class="modal-actions" style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
                     <button type="button" class="btn btn-secondary" onclick="window.closeModal()" style="padding:10px 24px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:14px;">取消</button>
                     <button type="submit" class="btn btn-primary" style="padding:10px 24px;border-radius:8px;border:none;background:#2563eb;color:#fff;cursor:pointer;font-size:14px;">保存修改</button>
