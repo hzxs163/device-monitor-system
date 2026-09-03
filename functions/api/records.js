@@ -45,11 +45,13 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
         const now = new Date();
         const timeStr = now.toLocaleString('zh-CN', { hour12: false });
 
-        const actionText = action === 'start' ? '🟢 开机' : '🔴 停机';
+        const actionText = action === 'start' ? '开机' : '停机';
         const durationText = duration !== null ? `\n运行时长：${formatDuration(duration)}` : '';
 
-        const title = `【设备监控】${deviceName} ${actionText}`;
+        // 标题：纯文本，不含特殊符号
+        const title = `设备监控 ${deviceName} ${actionText}`;
 
+        // 内容：详细参数
         const content = `设备名称：${deviceName}\n` +
             `位　　号：${deviceTag || '-'}\n` +
             `操　　作：${actionText}\n` +
@@ -60,7 +62,7 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
             appToken: appToken,
             title: title,
             content: content,
-            contentType: 1, // 1=文本
+            contentType: 1,
             uids: [uid]
         };
 
