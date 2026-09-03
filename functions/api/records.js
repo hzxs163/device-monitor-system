@@ -32,26 +32,24 @@ async function parseJSON(request) {
 // ================================================================
 // 权限校验：检查用户是否有权限操作该设备
 // ================================================================
-async function checkDevicePermission(env, deviceId, user) {
-    if (!user) {
-        return { allowed: false, error: '请先登录', status: 401 };
+async function checkDevicePermission(env, deviceId, user, userId, regionId) {
+    // 如果 user 为空或没有 region_id，用 userId 从数据库查
+    let effectiveUser = user;
+    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
+        const userStmt = env.DB.prepare('SELECT id, role, region_id FROM users WHERE id = ?');
+        effectiveUser = await userStmt.bind(userId).first();
     }
 
-    // 如果 user 没有 region_id，从数据库查
-    let effectiveUser = user;
-    if (!user.region_id && user.id) {
-        const userStmt = env.DB.prepare('SELECT id, role, region_id FROM users WHERE id = ?');
-        const dbUser = await userStmt.bind(user.id).first();
-        if (dbUser) {
-            effectiveUser = dbUser;
-        }
+    if (!effectiveUser) {
+        return { allowed: false, error: '请先登录', status: 401 };
     }
 
     if (effectiveUser.role === 'admin') {
         return { allowed: true, device: null };
     }
 
-    if (!effectiveUser.region_id) {
+    const userRegionId = effectiveUser.region_id || regionId;
+    if (!userRegionId) {
         return { allowed: false, error: '用户未分配区域，请联系管理员', status: 403 };
     }
 
@@ -67,7 +65,7 @@ async function checkDevicePermission(env, deviceId, user) {
             return { allowed: false, error: '设备不存在', status: 404 };
         }
 
-        if (device.region_id !== effectiveUser.region_id) {
+        if (device.region_id !== userRegionId) {
             return {
                 allowed: false,
                 error: '您没有权限操作该区域的设备',
@@ -149,16 +147,23 @@ async function handleStart(request, env, user) {
         return error('无效的请求数据', 400);
     }
 
-    const { deviceId } = body;
+    const { deviceId, userId, regionId } = body;
 
     if (!deviceId || typeof deviceId !== 'number') {
         return error('设备 ID 不能为空', 400);
     }
 
     // 权限校验
-    const permission = await checkDevicePermission(env, deviceId, user);
+    const permission = await checkDevicePermission(env, deviceId, user, userId, regionId);
     if (!permission.allowed) {
         return error(permission.error, permission.status);
+    }
+
+    // 获取有效用户信息（用于记录操作人）
+    let effectiveUser = user;
+    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
+        const userStmt = env.DB.prepare('SELECT id, username, nickname, role, region_id FROM users WHERE id = ?');
+        effectiveUser = await userStmt.bind(userId).first();
     }
 
     try {
@@ -183,7 +188,7 @@ async function handleStart(request, env, user) {
             INSERT INTO run_records (device_id, start_time, operator_id)
             VALUES (?, ?, ?)
         `);
-        await insertStmt.bind(deviceId, now, user?.id || 'system').run();
+        await insertStmt.bind(deviceId, now, effectiveUser?.id || 'system').run();
 
         const updateStmt = env.DB.prepare(`
             UPDATE devices SET status = 1, current_start_time = ? WHERE id = ?
@@ -195,10 +200,10 @@ async function handleStart(request, env, user) {
             device.name,
             device.tag,
             'start',
-            user?.nickname || user?.username || '系统'
+            effectiveUser?.nickname || effectiveUser?.username || '系统'
         );
 
-        if (user && user.role !== 'admin') {
+        if (effectiveUser && effectiveUser.role !== 'admin') {
             try {
                 const logStmt = env.DB.prepare(`
                     INSERT INTO user_operations (device_id, device_name, device_tag, operator_id, operator_name, action, duration_seconds)
@@ -208,12 +213,12 @@ async function handleStart(request, env, user) {
                     deviceId,
                     device.name,
                     device.tag || '',
-                    user.id,
-                    user.nickname || user.username,
+                    effectiveUser.id,
+                    effectiveUser.nickname || effectiveUser.username,
                     'start',
                     null
                 ).run();
-                console.log('[Records] 普通用户开机日志已记录:', user.username);
+                console.log('[Records] 普通用户开机日志已记录:', effectiveUser.username);
             } catch (logErr) {
                 console.error('[Records] 记录开机日志失败:', logErr);
             }
@@ -235,16 +240,23 @@ async function handleStop(request, env, user) {
         return error('无效的请求数据', 400);
     }
 
-    const { deviceId } = body;
+    const { deviceId, userId, regionId } = body;
 
     if (!deviceId || typeof deviceId !== 'number') {
         return error('设备 ID 不能为空', 400);
     }
 
     // 权限校验
-    const permission = await checkDevicePermission(env, deviceId, user);
+    const permission = await checkDevicePermission(env, deviceId, user, userId, regionId);
     if (!permission.allowed) {
         return error(permission.error, permission.status);
+    }
+
+    // 获取有效用户信息（用于记录操作人）
+    let effectiveUser = user;
+    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
+        const userStmt = env.DB.prepare('SELECT id, username, nickname, role, region_id FROM users WHERE id = ?');
+        effectiveUser = await userStmt.bind(userId).first();
     }
 
     try {
@@ -296,11 +308,11 @@ async function handleStop(request, env, user) {
             device.name,
             device.tag,
             'stop',
-            user?.nickname || user?.username || '系统',
+            effectiveUser?.nickname || effectiveUser?.username || '系统',
             duration
         );
 
-        if (user && user.role !== 'admin') {
+        if (effectiveUser && effectiveUser.role !== 'admin') {
             try {
                 const logStmt = env.DB.prepare(`
                     INSERT INTO user_operations (device_id, device_name, device_tag, operator_id, operator_name, action, duration_seconds)
@@ -310,12 +322,12 @@ async function handleStop(request, env, user) {
                     deviceId,
                     device.name,
                     device.tag || '',
-                    user.id,
-                    user.nickname || user.username,
+                    effectiveUser.id,
+                    effectiveUser.nickname || effectiveUser.username,
                     'stop',
                     duration
                 ).run();
-                console.log('[Records] 普通用户停机日志已记录:', user.username);
+                console.log('[Records] 普通用户停机日志已记录:', effectiveUser.username);
             } catch (logErr) {
                 console.error('[Records] 记录停机日志失败:', logErr);
             }
@@ -343,7 +355,7 @@ async function handleCorrect(request, env, user) {
         return error('无效的请求数据', 400);
     }
 
-    const { deviceId, mode, startTime, endTime, stopTime, reason } = body;
+    const { deviceId, mode, startTime, endTime, stopTime, reason, userId, regionId } = body;
 
     if (!deviceId || typeof deviceId !== 'number') {
         return error('设备 ID 不能为空', 400);
@@ -354,9 +366,16 @@ async function handleCorrect(request, env, user) {
     }
 
     // 权限校验
-    const permission = await checkDevicePermission(env, deviceId, user);
+    const permission = await checkDevicePermission(env, deviceId, user, userId, regionId);
     if (!permission.allowed) {
         return error(permission.error, permission.status);
+    }
+
+    // 获取有效用户信息
+    let effectiveUser = user;
+    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
+        const userStmt = env.DB.prepare('SELECT id, username, nickname, role, region_id FROM users WHERE id = ?');
+        effectiveUser = await userStmt.bind(userId).first();
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -418,7 +437,7 @@ async function handleCorrect(request, env, user) {
                 startTime,
                 endTime,
                 duration,
-                user?.id || 'system',
+                effectiveUser?.id || 'system',
                 1,
                 reason.trim()
             ).run();
