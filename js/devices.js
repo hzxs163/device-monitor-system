@@ -405,19 +405,97 @@ async function handleStop(deviceId) {
 }
 
 // ================================================================
-// 7. 设备状态更新
+// 7. 设备状态更新（只更新单张卡片，不重新渲染全部）
 // ================================================================
 
 export function updateDeviceLocal(deviceId, updates) {
     const device = allDevices.find(d => d.id === deviceId);
-    if (device) {
-        Object.assign(device, updates);
-        applyFilters();
-        renderAll();
-        if (onDeviceChange) {
-            onDeviceChange();
+    if (!device) return;
+
+    // 更新数据
+    Object.assign(device, updates);
+
+    // 更新统计栏
+    updateStatsBarOnly();
+
+    // 只更新对应的卡片 DOM，不重新渲染全部
+    const card = document.querySelector(`.device-card[data-id="${deviceId}"]`);
+    if (card) {
+        const isRunning = device.status === 1;
+        const statusDot = card.querySelector('.status-dot');
+        const statusText = card.querySelector('.device-status');
+        const durationEl = card.querySelector('.device-duration');
+        const actionBtn = card.querySelector('.card-actions .btn-start, .card-actions .btn-stop');
+
+        // 更新状态点
+        if (statusDot) {
+            statusDot.className = `status-dot ${isRunning ? 'running' : 'stopped'}`;
         }
+
+        // 更新状态文字
+        if (statusText) {
+            statusText.innerHTML = `
+                <span class="status-dot ${isRunning ? 'running' : 'stopped'}"></span>
+                ${isRunning ? '运行中' : '已停机'}
+            `;
+        }
+
+        // 更新运行时
+        if (durationEl) {
+            const currentDuration = isRunning && device.current_start_time
+                ? formatDuration(Math.floor(Date.now() / 1000) - device.current_start_time)
+                : '--';
+            const monthlyHours = device.monthly_hours || 0;
+            const monthlyText = monthlyHours > 0 ? `${monthlyHours}小时` : '0小时';
+            durationEl.innerHTML = `
+                <span>本月运行: ${monthlyText}</span>
+                <span>本次运行: ${currentDuration}</span>
+            `;
+        }
+
+        // 更新按钮
+        if (actionBtn) {
+            const newBtn = isRunning
+                ? `<button class="btn btn-stop" data-id="${device.id}" data-action="stop">停 机</button>`
+                : `<button class="btn btn-start" data-id="${device.id}" data-action="start">开 机</button>`;
+            actionBtn.outerHTML = newBtn;
+            // 重新绑定按钮事件
+            const newActionBtn = card.querySelector('.card-actions .btn-start, .card-actions .btn-stop');
+            if (newActionBtn) {
+                newActionBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const id = parseInt(newActionBtn.dataset.id);
+                    const action = newActionBtn.dataset.action;
+                    if (action === 'start') {
+                        handleStart(id);
+                    } else if (action === 'stop') {
+                        handleStop(id);
+                    }
+                });
+            }
+        }
+
+        // 更新卡片样式
+        card.className = `device-card ${isRunning ? 'running' : 'stopped'}`;
     }
+
+    // 触发统计更新
+    if (onDeviceChange) {
+        onDeviceChange();
+    }
+}
+
+/**
+ * 只更新统计栏，不刷新整个页面
+ */
+function updateStatsBarOnly() {
+    const devices = window.__devices || [];
+    const running = devices.filter(d => d.status === 1 && !d.is_deleted).length;
+    const runningCountEl = document.getElementById('runningCount');
+    if (runningCountEl) {
+        runningCountEl.textContent = `${running} 台`;
+    }
+    // 总运行时长不变，不需要更新
 }
 
 export function onDeviceChangeCallback(callback) {
