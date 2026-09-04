@@ -36,6 +36,10 @@
             <span class="stats-value" id="currentMonth">2026年9月</span>
         </div>
         <div class="stats-item">
+            <span class="stats-label">本月总运行</span>
+            <span class="stats-value" id="totalHours">0 小时</span>
+        </div>
+        <div class="stats-item">
             <span class="stats-label">运行中</span>
             <span class="stats-value" id="runningCount">0 台</span>
         </div>
@@ -210,16 +214,6 @@
                 hiddenInput.value = btn.dataset.value;
             }
         };
-    </script>
-
-    <!-- ============================================================ -->
-    <!-- 预加载导出模块 -->
-    <!-- ============================================================ -->
-    <script type="module">
-        import('/js/export.js').then(module => {
-            window.exportMonthlyReport = module.exportMonthlyReport;
-            console.log('✅ 导出模块已预加载');
-        }).catch(e => console.error('预加载导出模块失败:', e));
     </script>
 
     <!-- ============================================================ -->
@@ -479,18 +473,19 @@
             });
 
             // 导出 Excel（顶部统计栏按钮）
-const exportExcelBtn = document.getElementById('exportExcelBtn');
-if (exportExcelBtn) {
-    exportExcelBtn.addEventListener('click', function() {
-        if (typeof window.exportMonthlyReport === 'function') {
-            const devices = window.__devices || [];
-            const now = new Date();
-            window.exportMonthlyReport(devices, now.getFullYear(), now.getMonth() + 1);
-        } else {
-            alert('导出功能加载中，请稍后重试');
-        }
-    });
-}
+            const exportExcelBtn = document.getElementById('exportExcelBtn');
+            if (exportExcelBtn) {
+                exportExcelBtn.addEventListener('click', function() {
+                    import('/js/export.js').then(module => {
+                        const devices = window.__devices || [];
+                        const now = new Date();
+                        module.exportMonthlyReport(devices, now.getFullYear(), now.getMonth() + 1);
+                    }).catch(err => {
+                        console.error('[Index] 导出失败:', err);
+                        alert('导出功能加载失败，请重试');
+                    });
+                });
+            }
 
             // 点击模态框外部关闭
             modalOverlay.addEventListener('click', (e) => {
