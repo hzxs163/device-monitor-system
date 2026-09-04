@@ -190,3 +190,4 @@ function parseParams(params) {
         return null;
     }
 }
+window.exportMonthlyReport = exportMonthlyReport;
