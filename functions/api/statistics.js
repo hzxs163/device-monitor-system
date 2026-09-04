@@ -1,7 +1,7 @@
 /**
  * ================================================================
  * 设备运行监控系统 - 统计 API（独立版，无外部依赖）
- * 功能：月统计、类型汇总、设备排行.
+ * 功能：月统计、类型汇总、设备排行
  * ================================================================
  */
 
@@ -53,10 +53,12 @@ export async function onRequestGet({ request, env }) {
         `;
         const deviceParams = [];
 
+        // 区域过滤逻辑
         let userRegionId = null;
         let userRole = null;
 
         if (userId) {
+            // 获取用户信息
             const userStmt = env.DB.prepare(`
                 SELECT role, region_id FROM users WHERE id = ?
             `);
@@ -67,16 +69,20 @@ export async function onRequestGet({ request, env }) {
                 userRegionId = user.region_id;
 
                 if (user.role === 'admin') {
+                    // 管理员：如果传了 regionId 参数则过滤
                     if (regionId && regionId !== 'all' && regionId !== '') {
                         deviceSql += ` AND d.region_id = ?`;
                         deviceParams.push(parseInt(regionId));
                     }
+                    // 否则显示全部
                 } else {
+                    // 普通用户：只能看自己区域的设备
                     deviceSql += ` AND d.region_id = ?`;
                     deviceParams.push(user.region_id);
                 }
             }
         } else if (regionId && regionId !== 'all' && regionId !== '') {
+            // 无 userId 时，按 regionId 过滤
             deviceSql += ` AND d.region_id = ?`;
             deviceParams.push(parseInt(regionId));
         }
@@ -98,50 +104,25 @@ export async function onRequestGet({ request, env }) {
             });
         }
 
+        // 获取设备 ID 列表
+        const deviceIds = devices.results.map(d => d.id);
+
         // ============================================================
-        // 2. 直接用子查询查运行记录（不传 IN 参数）
+        // 2. 查询当月运行记录（只查这些设备的）
         // ============================================================
-        let subWhere = 'd.is_deleted = 0';
-        const subParams = [];
-
-        if (userId) {
-            const userStmt = env.DB.prepare(`
-                SELECT role, region_id FROM users WHERE id = ?
-            `);
-            const user = await userStmt.bind(userId).first();
-
-            if (user) {
-                if (user.role === 'admin') {
-                    if (regionId && regionId !== 'all' && regionId !== '') {
-                        subWhere += ` AND d.region_id = ?`;
-                        subParams.push(parseInt(regionId));
-                    }
-                } else {
-                    subWhere += ` AND d.region_id = ?`;
-                    subParams.push(user.region_id);
-                }
-            }
-        } else if (regionId && regionId !== 'all' && regionId !== '') {
-            subWhere += ` AND d.region_id = ?`;
-            subParams.push(parseInt(regionId));
-        }
-
-        let subSql = `
+        const placeholders = deviceIds.map(() => '?').join(',');
+        const recordStmt = env.DB.prepare(`
             SELECT
-                r.device_id,
-                r.start_time,
-                r.end_time,
-                r.duration_seconds
-            FROM run_records r
-            INNER JOIN devices d ON r.device_id = d.id
-            WHERE r.start_time <= ?
-              AND (r.end_time >= ? OR r.end_time IS NULL)
-              AND ${subWhere}
-        `;
-
-        const allSubParams = [endTime, startTime, ...subParams];
-        const recordStmt = env.DB.prepare(subSql);
-        const records = await recordStmt.bind(...allSubParams).all();
+                device_id,
+                start_time,
+                end_time,
+                duration_seconds
+            FROM run_records
+            WHERE device_id IN (${placeholders})
+              AND start_time <= ?
+              AND (end_time >= ? OR end_time IS NULL)
+        `);
+        const records = await recordStmt.bind(...deviceIds, endTime, startTime).all();
 
         // ============================================================
         // 3. 计算每台设备运行时长
@@ -161,17 +142,19 @@ export async function onRequestGet({ request, env }) {
             };
         });
 
-        (records.results || []).forEach(r => {
+        records.results.forEach(r => {
             const deviceId = r.device_id;
             if (!deviceId || !deviceHours.hasOwnProperty(deviceId)) return;
 
             let start = r.start_time;
             let end = r.end_time;
 
+            // 如果还在运行中，用当前时间
             if (end === null) {
                 end = Math.min(now, endTime);
             }
 
+            // 截取当月部分
             if (start < startTime) start = startTime;
             if (end > endTime) end = endTime;
 
