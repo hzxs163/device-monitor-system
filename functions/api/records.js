@@ -139,6 +139,44 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
 }
 
 // ================================================================
+// ntfy 推送
+// ================================================================
+async function sendNtfyNotification(env, deviceName, deviceTag, action, operatorName, duration = null) {
+    try {
+        const topic = env.NTFY_TOPIC;
+        const server = env.NTFY_SERVER || 'https://ntfy.sh';
+
+        if (!topic) {
+            console.warn('[ntfy] 未配置 NTFY_TOPIC，跳过推送');
+            return;
+        }
+
+        const actionText = action === 'start' ? '开机' : '停机';
+        const durationText = duration !== null ? `，运行 ${formatDuration(duration)}` : '';
+
+        const message = `【设备监控】${deviceName} ${actionText}\n位号：${deviceTag || '-'}\n操作人：${operatorName || '系统'}\n时间：${new Date().toLocaleString('zh-CN', { hour12: false })}${durationText}`;
+
+        const response = await fetch(`${server}/${topic}`, {
+            method: 'POST',
+            headers: {
+                'Title': `设备状态变更: ${deviceName}`,
+                'Priority': '4',
+                'Tags': action === 'start' ? 'white_check_mark' : 'warning',
+            },
+            body: message,
+        });
+
+        if (response.ok) {
+            console.log('[ntfy] 推送成功');
+        } else {
+            console.warn('[ntfy] 推送失败:', await response.text());
+        }
+    } catch (err) {
+        console.error('[ntfy] 推送异常:', err);
+    }
+}
+
+// ================================================================
 // 开机
 // ================================================================
 async function handleStart(request, env, user) {
@@ -195,7 +233,17 @@ async function handleStart(request, env, user) {
         `);
         await updateStmt.bind(now, deviceId).run();
 
+        // WxPusher 推送
         await sendWxPusherNotification(
+            env,
+            device.name,
+            device.tag,
+            'start',
+            effectiveUser?.nickname || effectiveUser?.username || '系统'
+        );
+
+        // ntfy 推送
+        await sendNtfyNotification(
             env,
             device.name,
             device.tag,
@@ -303,7 +351,18 @@ async function handleStop(request, env, user) {
         `);
         await deviceUpdateStmt.bind(deviceId).run();
 
+        // WxPusher 推送
         await sendWxPusherNotification(
+            env,
+            device.name,
+            device.tag,
+            'stop',
+            effectiveUser?.nickname || effectiveUser?.username || '系统',
+            duration
+        );
+
+        // ntfy 推送
+        await sendNtfyNotification(
             env,
             device.name,
             device.tag,
