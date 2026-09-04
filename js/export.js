@@ -192,10 +192,7 @@ function parseParams(params) {
 }
 
 // ============================================================
-// 导出
+// 暴露到全局，供 HTML 按钮直接调用
 // ============================================================
 
-export { exportMonthlyReport };
-
-// 暴露到全局，供 HTML 按钮直接调用
 window.exportMonthlyReport = exportMonthlyReport;
