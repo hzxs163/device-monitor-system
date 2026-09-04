@@ -213,6 +213,16 @@
     </script>
 
     <!-- ============================================================ -->
+    <!-- 预加载导出模块 -->
+    <!-- ============================================================ -->
+    <script type="module">
+        import('/js/export.js').then(module => {
+            window.exportMonthlyReport = module.exportMonthlyReport;
+            console.log('✅ 导出模块已预加载');
+        }).catch(e => console.error('预加载导出模块失败:', e));
+    </script>
+
+    <!-- ============================================================ -->
     <!-- JavaScript 模块 -->
     <!-- ============================================================ -->
     <script type="module">
@@ -472,14 +482,13 @@
             const exportExcelBtn = document.getElementById('exportExcelBtn');
             if (exportExcelBtn) {
                 exportExcelBtn.addEventListener('click', function() {
-                    import('/js/export.js').then(module => {
+                    if (typeof window.exportMonthlyReport === 'function') {
                         const devices = window.__devices || [];
                         const now = new Date();
-                        module.exportMonthlyReport(devices, now.getFullYear(), now.getMonth() + 1);
-                    }).catch(err => {
-                        console.error('[Index] 导出失败:', err);
-                        alert('导出功能加载失败，请重试');
-                    });
+                        window.exportMonthlyReport(devices, now.getFullYear(), now.getMonth() + 1);
+                    } else {
+                        alert('导出功能加载中，请稍后重试');
+                    }
                 });
             }
 
