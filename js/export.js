@@ -190,9 +190,3 @@ function parseParams(params) {
         return null;
     }
 }
-
-// ============================================================
-// 暴露到全局，供 HTML 按钮直接调用
-// ============================================================
-
-window.exportMonthlyReport = exportMonthlyReport;
