@@ -1460,10 +1460,118 @@
         };
 
         // ============================================================
-        // 内联编辑用户（预留，暂未实现完整功能）
+        // 内联编辑用户（改昵称/角色/区域/密码）
         // ============================================================
         window._inlineEditUser = async function(userId) {
-            alert('编辑用户功能开发中，暂不可用');
+            try {
+                // 拉取最新用户信息
+                const res = await fetch('/api/users');
+                const result = await res.json();
+                if (!result.success) {
+                    alert('❌ 加载用户信息失败: ' + (result.error || '未知错误'));
+                    return;
+                }
+                const user = (result.data || []).find(u => u.id === userId);
+                if (!user) {
+                    alert('❌ 用户不存在或已被删除');
+                    return;
+                }
+
+                const regions = await loadRegions();
+                const regionOptions = regions.map(r => `<option value="${r.id}" ${user.region_id === r.id ? 'selected' : ''}>${r.name}</option>`).join('');
+
+                const html = `
+                    <div class="modal-content" style="max-width:520px;width:100%;">
+                        <div class="modal-header">
+                            <h2>✏️ 编辑用户：${escapeHtml(user.nickname || user.username)}</h2>
+                            <button class="modal-close" onclick="window.closeModal()">✕</button>
+                        </div>
+                        <form id="inlineEditUserForm">
+                            <div class="form-group">
+                                <label>用户名（不可修改）</label>
+                                <input type="text" value="${escapeHtml(user.username)}" disabled style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#f8fafc;color:#64748b;" />
+                            </div>
+                            <div class="form-group">
+                                <label>昵称</label>
+                                <input type="text" id="inlineEditNickname" value="${escapeHtml(user.nickname || '')}" placeholder="如：张三" required style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" />
+                            </div>
+                            <div class="form-group">
+                                <label>角色</label>
+                                <select id="inlineEditRole" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff;appearance:auto;min-height:44px;box-sizing:border-box;">
+                                    <option value="user" ${user.role === 'user' ? 'selected' : ''}>普通用户</option>
+                                    <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>管理员</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>所属区域</label>
+                                <select id="inlineEditRegion" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff;appearance:auto;min-height:44px;box-sizing:border-box;">
+                                    ${regionOptions}
+                                </select>
+                                <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">角色为管理员时区域自动忽略（管理全部区域）</div>
+                            </div>
+                            <div class="form-group">
+                                <label>重置密码（留空则不修改）</label>
+                                <input type="password" id="inlineEditPassword" placeholder="至少4位，留空保持不变" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;" />
+                            </div>
+                            <div class="modal-actions" style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+                                <button type="button" class="btn btn-secondary" onclick="window.closeModal()" style="padding:10px 24px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:14px;">取消</button>
+                                <button type="submit" class="btn btn-primary" style="padding:10px 24px;border-radius:8px;border:none;background:#2563eb;color:#fff;cursor:pointer;font-size:14px;">保存修改</button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+
+                window.openModal(html);
+
+                document.getElementById('inlineEditUserForm').addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    const nickname = document.getElementById('inlineEditNickname').value.trim();
+                    const role = document.getElementById('inlineEditRole').value;
+                    const region_id = parseInt(document.getElementById('inlineEditRegion').value);
+                    const password = document.getElementById('inlineEditPassword').value;
+
+                    if (!nickname) {
+                        alert('昵称不能为空');
+                        return;
+                    }
+                    if (password && password.length < 4) {
+                        alert('密码至少4位');
+                        return;
+                    }
+                    if (role !== 'admin' && !region_id) {
+                        alert('普通用户必须选择所属区域');
+                        return;
+                    }
+
+                    const payload = { nickname, role };
+                    if (role !== 'admin') {
+                        payload.region_id = region_id;
+                    }
+                    if (password) {
+                        payload.password = password;
+                    }
+
+                    try {
+                        const res = await fetch(`/api/users/${userId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        const result = await res.json();
+                        if (result.success) {
+                            window.showToast('✅ 用户更新成功');
+                            window.closeModal();
+                            renderUserManagement();
+                        } else {
+                            alert('❌ ' + (result.error || '更新失败'));
+                        }
+                    } catch (err) {
+                        alert('❌ 请求失败: ' + err.message);
+                    }
+                });
+            } catch (err) {
+                alert('❌ 加载用户信息失败: ' + err.message);
+            }
         };
 
         // 打开管理面板
