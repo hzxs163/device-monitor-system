@@ -19,12 +19,16 @@ function error(message = '操作失败', status = 400) {
     );
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env, user }) {
     const url = new URL(request.url);
     const year = parseInt(url.searchParams.get('year')) || new Date().getFullYear();
     const month = parseInt(url.searchParams.get('month')) || new Date().getMonth() + 1;
-    const userId = url.searchParams.get('userId');
     const regionId = url.searchParams.get('regionId');
+
+    // 权限：未登录禁止访问（中间件已拦截，此处防御）
+    if (!user) {
+        return error('请先登录', 401);
+    }
 
     if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
         return error('无效的日期参数', 400);
@@ -36,7 +40,7 @@ export async function onRequestGet({ request, env }) {
         const now = Math.floor(Date.now() / 1000);
 
         // ============================================================
-        // 1. 构建设备查询（支持区域过滤）
+        // 1. 构建设备查询（区域过滤以登录身份为准，不信任请求参数）
         // ============================================================
         let deviceSql = `
             SELECT d.id, d.name, d.tag, dt.name as type, d.status, d.current_start_time, d.region_id, r.name as region_name
@@ -49,28 +53,15 @@ export async function onRequestGet({ request, env }) {
 
         let userRegionId = null;
 
-        if (userId) {
-            const userStmt = env.DB.prepare(`
-                SELECT role, region_id FROM users WHERE id = ?
-            `);
-            const user = await userStmt.bind(userId).first();
-
-            if (user) {
-                userRegionId = user.region_id;
-
-                if (user.role === 'admin') {
-                    if (regionId && regionId !== 'all' && regionId !== '') {
-                        deviceSql += ` AND d.region_id = ?`;
-                        deviceParams.push(parseInt(regionId));
-                    }
-                } else {
-                    deviceSql += ` AND d.region_id = ?`;
-                    deviceParams.push(user.region_id);
-                }
+        if (user.role === 'admin') {
+            if (regionId && regionId !== 'all' && regionId !== '') {
+                deviceSql += ` AND d.region_id = ?`;
+                deviceParams.push(parseInt(regionId));
             }
-        } else if (regionId && regionId !== 'all' && regionId !== '') {
+        } else {
+            userRegionId = user.region_id;
             deviceSql += ` AND d.region_id = ?`;
-            deviceParams.push(parseInt(regionId));
+            deviceParams.push(user.region_id);
         }
 
         deviceSql += ` ORDER BY d.id ASC`;
@@ -96,26 +87,14 @@ export async function onRequestGet({ request, env }) {
         let subWhere = 'd.is_deleted = 0';
         const subParams = [];
 
-        if (userId) {
-            const userStmt = env.DB.prepare(`
-                SELECT role, region_id FROM users WHERE id = ?
-            `);
-            const user = await userStmt.bind(userId).first();
-
-            if (user) {
-                if (user.role === 'admin') {
-                    if (regionId && regionId !== 'all' && regionId !== '') {
-                        subWhere += ` AND d.region_id = ?`;
-                        subParams.push(parseInt(regionId));
-                    }
-                } else {
-                    subWhere += ` AND d.region_id = ?`;
-                    subParams.push(user.region_id);
-                }
+        if (user.role === 'admin') {
+            if (regionId && regionId !== 'all' && regionId !== '') {
+                subWhere += ` AND d.region_id = ?`;
+                subParams.push(parseInt(regionId));
             }
-        } else if (regionId && regionId !== 'all' && regionId !== '') {
+        } else {
             subWhere += ` AND d.region_id = ?`;
-            subParams.push(parseInt(regionId));
+            subParams.push(user.region_id);
         }
 
         let subSql = `
