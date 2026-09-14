@@ -30,25 +30,19 @@ async function parseJSON(request) {
 }
 
 // ================================================================
-// 权限校验：检查用户是否有权限操作该设备
+// 权限校验：检查当前登录用户是否有权限操作该设备
+// 一律以登录凭证中的身份(user)为准，不信任请求体里的 userId
 // ================================================================
-async function checkDevicePermission(env, deviceId, user, userId, regionId) {
-    // 如果 user 为空或没有 region_id，用 userId 从数据库查
-    let effectiveUser = user;
-    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
-        const userStmt = env.DB.prepare('SELECT id, role, region_id FROM users WHERE id = ?');
-        effectiveUser = await userStmt.bind(userId).first();
-    }
-
-    if (!effectiveUser) {
+async function checkDevicePermission(env, deviceId, user) {
+    if (!user) {
         return { allowed: false, error: '请先登录', status: 401 };
     }
 
-    if (effectiveUser.role === 'admin') {
+    if (user.role === 'admin') {
         return { allowed: true, device: null };
     }
 
-    const userRegionId = effectiveUser.region_id || regionId;
+    const userRegionId = user.region_id;
     if (!userRegionId) {
         return { allowed: false, error: '用户未分配区域，请联系管理员', status: 403 };
     }
@@ -185,24 +179,20 @@ async function handleStart(request, env, user) {
         return error('无效的请求数据', 400);
     }
 
-    const { deviceId, userId, regionId } = body;
+    const { deviceId } = body;
 
     if (!deviceId || typeof deviceId !== 'number') {
         return error('设备 ID 不能为空', 400);
     }
 
-    // 权限校验
-    const permission = await checkDevicePermission(env, deviceId, user, userId, regionId);
+    // 权限校验（身份一律取登录凭证中的 user）
+    const permission = await checkDevicePermission(env, deviceId, user);
     if (!permission.allowed) {
         return error(permission.error, permission.status);
     }
 
-    // 获取有效用户信息（用于记录操作人）
-    let effectiveUser = user;
-    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
-        const userStmt = env.DB.prepare('SELECT id, username, nickname, role, region_id FROM users WHERE id = ?');
-        effectiveUser = await userStmt.bind(userId).first();
-    }
+    // 操作人：一律为当前登录用户
+    const effectiveUser = user;
 
     try {
         const deviceStmt = env.DB.prepare(`
@@ -288,24 +278,20 @@ async function handleStop(request, env, user) {
         return error('无效的请求数据', 400);
     }
 
-    const { deviceId, userId, regionId } = body;
+    const { deviceId } = body;
 
     if (!deviceId || typeof deviceId !== 'number') {
         return error('设备 ID 不能为空', 400);
     }
 
-    // 权限校验
-    const permission = await checkDevicePermission(env, deviceId, user, userId, regionId);
+    // 权限校验（身份一律取登录凭证中的 user）
+    const permission = await checkDevicePermission(env, deviceId, user);
     if (!permission.allowed) {
         return error(permission.error, permission.status);
     }
 
-    // 获取有效用户信息（用于记录操作人）
-    let effectiveUser = user;
-    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
-        const userStmt = env.DB.prepare('SELECT id, username, nickname, role, region_id FROM users WHERE id = ?');
-        effectiveUser = await userStmt.bind(userId).first();
-    }
+    // 操作人：一律为当前登录用户
+    const effectiveUser = user;
 
     try {
         const deviceStmt = env.DB.prepare(`
@@ -414,7 +400,7 @@ async function handleCorrect(request, env, user) {
         return error('无效的请求数据', 400);
     }
 
-    const { deviceId, mode, startTime, endTime, stopTime, reason, userId, regionId } = body;
+    const { deviceId, mode, startTime, endTime, stopTime, reason } = body;
 
     if (!deviceId || typeof deviceId !== 'number') {
         return error('设备 ID 不能为空', 400);
@@ -424,18 +410,14 @@ async function handleCorrect(request, env, user) {
         return error('请填写原因说明', 400);
     }
 
-    // 权限校验
-    const permission = await checkDevicePermission(env, deviceId, user, userId, regionId);
+    // 权限校验（身份一律取登录凭证中的 user）
+    const permission = await checkDevicePermission(env, deviceId, user);
     if (!permission.allowed) {
         return error(permission.error, permission.status);
     }
 
-    // 获取有效用户信息
-    let effectiveUser = user;
-    if ((!effectiveUser || !effectiveUser.region_id) && userId) {
-        const userStmt = env.DB.prepare('SELECT id, username, nickname, role, region_id FROM users WHERE id = ?');
-        effectiveUser = await userStmt.bind(userId).first();
-    }
+    // 操作人：一律为当前登录用户
+    const effectiveUser = user;
 
     const now = Math.floor(Date.now() / 1000);
 
