@@ -8,14 +8,32 @@
 import { success, error, parseJSON } from '../utils/response.js';
 
 // ================================================================
-// 1. GET /api/devices - 获取设备列表（支持区域过滤）
+// 权限校验辅助：仅管理员可操作（增/改/删）
 // ================================================================
 
-export async function onRequestGet({ request, env }) {
+function requireAdmin(user) {
+    if (!user) {
+        return error('请先登录', 401);
+    }
+    if (user.role !== 'admin') {
+        return error('无权限，该操作仅管理员可用', 403);
+    }
+    return null;
+}
+
+// ================================================================
+// 1. GET /api/devices - 获取设备列表（按登录身份过滤区域）
+// ================================================================
+
+export async function onRequestGet({ request, env, user }) {
     try {
         const url = new URL(request.url);
         const regionId = url.searchParams.get('regionId');
-        const userId = url.searchParams.get('userId');
+
+        // 权限：未登录禁止访问（中间件已拦截，此处防御）
+        if (!user) {
+            return error('请先登录', 401);
+        }
 
         // 构建查询
         let sql = `
@@ -41,32 +59,18 @@ export async function onRequestGet({ request, env }) {
         `;
         const bindParams = [];
 
-        // 区域过滤逻辑
-        if (userId) {
-            // 获取用户信息
-            const userStmt = env.DB.prepare(`
-                SELECT role, region_id FROM users WHERE id = ?
-            `);
-            const user = await userStmt.bind(userId).first();
-
-            if (user) {
-                if (user.role === 'admin') {
-                    // 管理员：如果有 regionId 参数则过滤
-                    if (regionId && regionId !== 'all' && regionId !== '') {
-                        sql += ` AND d.region_id = ?`;
-                        bindParams.push(parseInt(regionId));
-                    }
-                    // 否则显示全部
-                } else {
-                    // 普通用户：只能看自己区域的设备
-                    sql += ` AND d.region_id = ?`;
-                    bindParams.push(user.region_id);
-                }
+        // 区域过滤逻辑：一律以登录凭证中的身份为准，不信任请求参数里的 userId
+        if (user.role === 'admin') {
+            // 管理员：如果有 regionId 参数则过滤
+            if (regionId && regionId !== 'all' && regionId !== '') {
+                sql += ` AND d.region_id = ?`;
+                bindParams.push(parseInt(regionId));
             }
-        } else if (regionId && regionId !== 'all' && regionId !== '') {
-            // 无 userId 时，按 regionId 过滤（兼容旧逻辑）
+            // 否则显示全部
+        } else {
+            // 普通用户：只能看自己区域的设备
             sql += ` AND d.region_id = ?`;
-            bindParams.push(parseInt(regionId));
+            bindParams.push(user.region_id);
         }
 
         sql += ` ORDER BY d.status DESC, d.id ASC`;
@@ -105,7 +109,11 @@ export async function onRequestGet({ request, env }) {
 // 2. POST /api/devices - 添加设备（支持区域选择）
 // ================================================================
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, user }) {
+    // 权限：仅管理员可添加设备
+    const denied = requireAdmin(user);
+    if (denied) return denied;
+
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
@@ -184,7 +192,11 @@ export async function onRequestPost({ request, env }) {
 // 3. PUT /api/devices/:id - 编辑设备（支持区域修改）
 // ================================================================
 
-export async function onRequestPut({ request, env, params }) {
+export async function onRequestPut({ request, env, params, user }) {
+    // 权限：仅管理员可编辑设备
+    const denied = requireAdmin(user);
+    if (denied) return denied;
+
     let deviceId = parseInt(params?.id);
     
     if (!deviceId || isNaN(deviceId)) {
@@ -275,8 +287,19 @@ export async function onRequestPut({ request, env, params }) {
 // 4. DELETE /api/devices/:id - 删除设备（软删除）
 // ================================================================
 
-export async function onRequestDelete({ env, params }) {
-    const deviceId = parseInt(params.id);
+export async function onRequestDelete({ request, env, params, user }) {
+    // 权限：仅管理员可删除设备
+    const denied = requireAdmin(user);
+    if (denied) return denied;
+
+    // 优先取路由参数，取不到时从 URL 解析（兼容不同部署环境）
+    let deviceId = parseInt(params?.id);
+    if (!deviceId || isNaN(deviceId)) {
+        const url = new URL(request.url);
+        const pathParts = url.pathname.split('/');
+        deviceId = parseInt(pathParts[pathParts.length - 1]);
+    }
+
     if (!deviceId || isNaN(deviceId)) {
         return error('无效的设备 ID', 400);
     }
@@ -306,7 +329,11 @@ export async function onRequestDelete({ env, params }) {
 // 5. PUT /api/devices/:id/params - 更新设备参数
 // ================================================================
 
-export async function onRequestPutParams({ request, env, params }) {
+export async function onRequestPutParams({ request, env, params, user }) {
+    // 权限：仅管理员可更新设备参数
+    const denied = requireAdmin(user);
+    if (denied) return denied;
+
     // 从 URL 中解析 deviceId
     const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
