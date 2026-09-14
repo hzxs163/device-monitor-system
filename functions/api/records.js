@@ -86,10 +86,10 @@ async function checkDevicePermission(env, deviceId, user, userId, regionId) {
 async function sendWxPusherNotification(env, deviceName, deviceTag, action, operatorName, duration = null) {
     try {
         const appToken = env.WXPUSHER_APP_TOKEN;
-        const uid = env.WXPUSHER_UID;
+        const topicId = env.WXPUSHER_TOPIC_ID;
 
-        if (!appToken || !uid) {
-            console.warn('[WxPusher] 未配置 appToken 或 uid，跳过推送');
+        if (!appToken || !topicId) {
+            console.warn('[WxPusher] 未配置 appToken 或 topicId，跳过推送');
             return;
         }
 
@@ -116,7 +116,7 @@ async function sendWxPusherNotification(env, deviceName, deviceTag, action, oper
             summary: summary,
             content: content,
             contentType: 2,
-            uids: [uid]
+            topicIds: [parseInt(topicId)]
         };
 
         const response = await fetch('https://wxpusher.zjiecode.com/api/send/message', {
