@@ -1,10 +1,22 @@
 /**
  * ================================================================
- * 设备运行监控系统 - 设备类型管理 API（无权限版本）
+ * 设备运行监控系统 - 设备类型管理 API
+ * 查看：登录用户可用；增/改/删：仅管理员
  * ================================================================
  */
 
 import { success, error, parseJSON } from '../utils/response.js';
+
+// 权限校验：仅管理员可操作（增/改/删）
+function requireAdmin(user) {
+    if (!user) {
+        return error('请先登录', 401);
+    }
+    if (user.role !== 'admin') {
+        return error('无权限，该操作仅管理员可用', 403);
+    }
+    return null;
+}
 
 // GET /api/types - 获取类型列表
 export async function onRequestGet({ env }) {
@@ -22,8 +34,11 @@ export async function onRequestGet({ env }) {
     }
 }
 
-// POST /api/types - 添加类型
-export async function onRequestPost({ request, env }) {
+// POST /api/types - 添加类型（仅管理员）
+export async function onRequestPost({ request, env, user }) {
+    const denied = requireAdmin(user);
+    if (denied) return denied;
+
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
@@ -66,8 +81,11 @@ export async function onRequestPost({ request, env }) {
     }
 }
 
-// PUT /api/types/order - 更新类型顺序
-export async function onRequestPutOrder({ request, env }) {
+// PUT /api/types/order - 更新类型顺序（仅管理员）
+export async function onRequestPutOrder({ request, env, user }) {
+    const denied = requireAdmin(user);
+    if (denied) return denied;
+
     const body = await parseJSON(request);
     if (!body) {
         return error('无效的请求数据', 400);
@@ -92,8 +110,11 @@ export async function onRequestPutOrder({ request, env }) {
     }
 }
 
-// PUT /api/types/:id - 修改类型名称
-export async function onRequestPut({ request, env }) {
+// PUT /api/types/:id - 修改类型名称（仅管理员）
+export async function onRequestPut({ request, env, user }) {
+    const denied = requireAdmin(user);
+    if (denied) return denied;
+
     // 从 URL 路径中解析 ID
     const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
@@ -135,8 +156,11 @@ export async function onRequestPut({ request, env }) {
     }
 }
 
-// DELETE /api/types/:id - 删除类型（从 URL 自己解析 ID）
-export async function onRequestDelete({ request, env }) {
+// DELETE /api/types/:id - 删除类型（仅管理员，从 URL 自己解析 ID）
+export async function onRequestDelete({ request, env, user }) {
+    const denied = requireAdmin(user);
+    if (denied) return denied;
+
     // 从 URL 路径中解析 ID
     const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
