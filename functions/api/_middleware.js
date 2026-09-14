@@ -42,6 +42,12 @@ export async function onRequest(context) {
         return recordsOnRequest(context);
     }
 
+    // 如果路径以 /api/regions 开头，交给 regions.js 处理
+    if (path.startsWith('/api/regions')) {
+        const { onRequest: regionsOnRequest } = await import('./regions.js');
+        return regionsOnRequest(context);
+    }
+
     // 如果路径以 /api/types 开头，交给 types.js 处理
     if (path.startsWith('/api/types')) {
         const { onRequest: typesOnRequest } = await import('./types.js');
