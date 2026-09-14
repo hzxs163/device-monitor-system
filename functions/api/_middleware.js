@@ -18,6 +18,18 @@ export async function onRequest(context) {
         console.log('[API Middleware] 用户已注入:', user.username);
     }
 
+    // ============================================================
+    // 强制登录校验：除登录接口(/api/auth)外，未登录一律拒绝
+    // ============================================================
+    if (!path.startsWith('/api/auth')) {
+        if (!context.user) {
+            return new Response(JSON.stringify({ success: false, error: '请先登录', data: null }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+    }
+
     // 如果路径以 /api/statistics 开头，交给 statistics.js 处理
     if (path.startsWith('/api/statistics')) {
         const { onRequest: statsOnRequest } = await import('./statistics.js');
