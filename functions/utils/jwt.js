@@ -49,6 +49,7 @@ export async function signJWT(payload, env) {
             username: payload.username,
             nickname: payload.nickname || payload.username,
             role: payload.role || 'user',
+            region_id: payload.region_id || null,
         })
             .setProtectedHeader({ alg: 'HS256' })
             .setIssuedAt()
@@ -84,6 +85,7 @@ export async function verifyJWT(token, env) {
             username: payload.username,
             nickname: payload.nickname || payload.username,
             role: payload.role || 'user',
+            region_id: payload.region_id || null,
             iat: payload.iat,
             exp: payload.exp,
         };
