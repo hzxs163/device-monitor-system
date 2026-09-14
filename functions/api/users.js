@@ -160,7 +160,13 @@ export async function onRequestPut({ request, env, user, params }) {
         return forbidden('需要管理员权限');
     }
 
-    const userId = params.id;
+    // 优先取路由参数，取不到时从 URL 解析（兼容不同部署环境）
+    let userId = params?.id;
+    if (!userId) {
+        const url = new URL(request.url);
+        const pathParts = url.pathname.split('/').filter(Boolean);
+        userId = pathParts[pathParts.length - 1];
+    }
     if (!userId) {
         return error('用户 ID 不能为空', 400);
     }
@@ -262,7 +268,13 @@ export async function onRequestPutToggle({ request, env, user, params }) {
         return forbidden('需要管理员权限');
     }
 
-    const userId = params.id;
+    // 优先取路由参数，取不到时从 URL 解析（兼容不同部署环境）
+    let userId = params?.id;
+    if (!userId) {
+        const url = new URL(request.url);
+        const pathParts = url.pathname.split('/').filter(Boolean);
+        userId = pathParts[pathParts.length - 2];
+    }
     if (!userId) {
         return error('用户 ID 不能为空', 400);
     }
@@ -316,9 +328,10 @@ export async function onRequestPutToggle({ request, env, user, params }) {
 // ================================================================
 
 export async function onRequest(context) {
-    const { request, params } = context;
+    const { request } = context;
     const url = new URL(request.url);
     const method = request.method;
+    const pathParts = url.pathname.split('/').filter(Boolean);
 
     // /api/users/:id/toggle
     if (url.pathname.match(/^\/api\/users\/[^\/]+\/toggle$/)) {
@@ -329,7 +342,7 @@ export async function onRequest(context) {
     }
 
     // /api/users/:id
-    if (params && params.id) {
+    if (pathParts.length === 3 && pathParts[1] === 'users') {
         if (method === 'PUT') {
             return onRequestPut(context);
         }
@@ -337,11 +350,13 @@ export async function onRequest(context) {
     }
 
     // /api/users
-    if (method === 'GET') {
-        return onRequestGet(context);
-    }
-    if (method === 'POST') {
-        return onRequestPost(context);
+    if (pathParts.length === 2 && pathParts[1] === 'users') {
+        if (method === 'GET') {
+            return onRequestGet(context);
+        }
+        if (method === 'POST') {
+            return onRequestPost(context);
+        }
     }
 
     return error('方法不允许', 405);
