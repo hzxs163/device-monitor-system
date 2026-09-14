@@ -5,7 +5,6 @@
  * ================================================================
  */
 
-// 工具函数：成功响应
 function success(data, message = '操作成功') {
     return new Response(
         JSON.stringify({ success: true, message, data }),
@@ -13,17 +12,12 @@ function success(data, message = '操作成功') {
     );
 }
 
-// 工具函数：错误响应
 function error(message = '操作失败', status = 400) {
     return new Response(
         JSON.stringify({ success: false, error: message, data: null }),
         { status, headers: { 'Content-Type': 'application/json' } }
     );
 }
-
-// ================================================================
-// GET /api/statistics/monthly - 月度统计（支持区域过滤）
-// ================================================================
 
 export async function onRequestGet({ request, env }) {
     const url = new URL(request.url);
@@ -53,36 +47,28 @@ export async function onRequestGet({ request, env }) {
         `;
         const deviceParams = [];
 
-        // 区域过滤逻辑
         let userRegionId = null;
-        let userRole = null;
 
         if (userId) {
-            // 获取用户信息
             const userStmt = env.DB.prepare(`
                 SELECT role, region_id FROM users WHERE id = ?
             `);
             const user = await userStmt.bind(userId).first();
 
             if (user) {
-                userRole = user.role;
                 userRegionId = user.region_id;
 
                 if (user.role === 'admin') {
-                    // 管理员：如果传了 regionId 参数则过滤
                     if (regionId && regionId !== 'all' && regionId !== '') {
                         deviceSql += ` AND d.region_id = ?`;
                         deviceParams.push(parseInt(regionId));
                     }
-                    // 否则显示全部
                 } else {
-                    // 普通用户：只能看自己区域的设备
                     deviceSql += ` AND d.region_id = ?`;
                     deviceParams.push(user.region_id);
                 }
             }
         } else if (regionId && regionId !== 'all' && regionId !== '') {
-            // 无 userId 时，按 regionId 过滤
             deviceSql += ` AND d.region_id = ?`;
             deviceParams.push(parseInt(regionId));
         }
@@ -104,25 +90,50 @@ export async function onRequestGet({ request, env }) {
             });
         }
 
-        // 获取设备 ID 列表
-        const deviceIds = devices.results.map(d => d.id);
+        // ============================================================
+        // 2. 用子查询查运行记录（避免 IN 参数过多）
+        // ============================================================
+        let subWhere = 'd.is_deleted = 0';
+        const subParams = [];
 
-        // ============================================================
-        // 2. 查询当月运行记录（只查这些设备的）
-        // ============================================================
-        const placeholders = deviceIds.map(() => '?').join(',');
-        const recordStmt = env.DB.prepare(`
+        if (userId) {
+            const userStmt = env.DB.prepare(`
+                SELECT role, region_id FROM users WHERE id = ?
+            `);
+            const user = await userStmt.bind(userId).first();
+
+            if (user) {
+                if (user.role === 'admin') {
+                    if (regionId && regionId !== 'all' && regionId !== '') {
+                        subWhere += ` AND d.region_id = ?`;
+                        subParams.push(parseInt(regionId));
+                    }
+                } else {
+                    subWhere += ` AND d.region_id = ?`;
+                    subParams.push(user.region_id);
+                }
+            }
+        } else if (regionId && regionId !== 'all' && regionId !== '') {
+            subWhere += ` AND d.region_id = ?`;
+            subParams.push(parseInt(regionId));
+        }
+
+        let subSql = `
             SELECT
-                device_id,
-                start_time,
-                end_time,
-                duration_seconds
-            FROM run_records
-            WHERE device_id IN (${placeholders})
-              AND start_time <= ?
-              AND (end_time >= ? OR end_time IS NULL)
-        `);
-        const records = await recordStmt.bind(...deviceIds, endTime, startTime).all();
+                r.device_id,
+                r.start_time,
+                r.end_time,
+                r.duration_seconds
+            FROM run_records r
+            INNER JOIN devices d ON r.device_id = d.id
+            WHERE r.start_time <= ?
+              AND (r.end_time >= ? OR r.end_time IS NULL)
+              AND ${subWhere}
+        `;
+
+        const allSubParams = [endTime, startTime, ...subParams];
+        const recordStmt = env.DB.prepare(subSql);
+        const records = await recordStmt.bind(...allSubParams).all();
 
         // ============================================================
         // 3. 计算每台设备运行时长
@@ -142,19 +153,17 @@ export async function onRequestGet({ request, env }) {
             };
         });
 
-        records.results.forEach(r => {
+        (records.results || []).forEach(r => {
             const deviceId = r.device_id;
             if (!deviceId || !deviceHours.hasOwnProperty(deviceId)) return;
 
             let start = r.start_time;
             let end = r.end_time;
 
-            // 如果还在运行中，用当前时间
             if (end === null) {
                 end = Math.min(now, endTime);
             }
 
-            // 截取当月部分
             if (start < startTime) start = startTime;
             if (end > endTime) end = endTime;
 
@@ -163,9 +172,6 @@ export async function onRequestGet({ request, env }) {
             }
         });
 
-        // ============================================================
-        // 4. 转换为小时（取整）
-        // ============================================================
         const deviceHoursRounded = {};
         let totalHours = 0;
 
@@ -177,9 +183,6 @@ export async function onRequestGet({ request, env }) {
             totalHours += rounded;
         });
 
-        // ============================================================
-        // 5. 排行
-        // ============================================================
         const ranking = Object.keys(deviceHoursRounded)
             .map(id => ({
                 device_id: parseInt(id),
@@ -193,9 +196,6 @@ export async function onRequestGet({ request, env }) {
             }))
             .sort((a, b) => b.hours - a.hours);
 
-        // ============================================================
-        // 6. 类型汇总
-        // ============================================================
         const typeMap = {};
         ranking.forEach(item => {
             const type = item.type;
@@ -207,9 +207,6 @@ export async function onRequestGet({ request, env }) {
             .map(type => ({ type, total_hours: typeMap[type] }))
             .sort((a, b) => b.total_hours - a.total_hours);
 
-        // ============================================================
-        // 7. 获取区域名称（用于前端显示）
-        // ============================================================
         let regionName = null;
         if (userRegionId) {
             const regionStmt = env.DB.prepare(`
@@ -234,9 +231,6 @@ export async function onRequestGet({ request, env }) {
     }
 }
 
-// ================================================================
-// 路由入口
-// ================================================================
 export async function onRequest(context) {
     const { request } = context;
     const method = request.method;
